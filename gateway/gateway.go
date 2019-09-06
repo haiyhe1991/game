@@ -34,6 +34,8 @@ type Gateway struct {
 	id   int32
 	addr string
 	//
+	rtb routeTable
+	//
 	csocks map[uint64]*client
 	cplays map[uint64]*client
 	csl    sync.Mutex
@@ -49,6 +51,7 @@ func (gw *Gateway) InitService() error {
 
 	logger.Info(0, "Gateway Start Connect Service")
 	//注册协议及路由
+	//gw.rtb.register(xxxx, "login/service")
 	//1.连接其它逻辑服务器
 	//1-1.后面处理
 	//2.启动网络服务
