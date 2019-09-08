@@ -1,10 +1,8 @@
 package gateway
 
 import (
-	"bytes"
 	"flag"
 	"fmt"
-	"sync"
 
 	"github.com/yamakiller/magicNet/core"
 	"github.com/yamakiller/magicNet/engine/actor"
@@ -12,14 +10,6 @@ import (
 	"github.com/yamakiller/magicNet/network"
 	"github.com/yamakiller/magicNet/service"
 )
-
-var clientPool = sync.Pool{
-	New: func() interface{} {
-		b := new(client)
-		b.data = bytes.NewBuffer([]byte{})
-		return b
-	},
-}
 
 // Gateway : 网关服务对象
 type Gateway struct {
@@ -36,9 +26,7 @@ type Gateway struct {
 	//
 	rtb routeTable
 	//
-	csocks map[uint64]*client
-	cplays map[uint64]*client
-	csl    sync.Mutex
+	cps gatePlays
 }
 
 // InitService : 初始化网关服务
@@ -50,6 +38,7 @@ func (gw *Gateway) InitService() error {
 	}
 
 	logger.Info(0, "Gateway Start Connect Service")
+	gw.cps.init(gw.id)
 	//注册协议及路由
 	//gw.rtb.register(xxxx, "login/service")
 	//1.连接其它逻辑服务器
@@ -91,10 +80,8 @@ func (gw *Gateway) LineOption() {
 	gw.dcmd.LineOption()
 }
 
-func (gw *Gateway) appendSocket(c *client) {
-	gw.csl.Lock()
-	gw.csocks[c.id] = c
-	gw.csl.Unlock()
+/*func (gw *Gateway) appendSocket(c *client) {
+
 }
 
 func (gw *Gateway) removeSocket(sock int32) *client {
@@ -109,18 +96,25 @@ func (gw *Gateway) removeSocket(sock int32) *client {
 	}
 	gw.csl.Unlock()
 	return c
-}
+}*/
 
 func (gw *Gateway) onAccept(self actor.Context, message interface{}) {
 	accepter := message.(network.NetAccept)
-	c := clientPool.Get().(*client)
-	c.registerSocket(gw.id, accepter.Handle)
-	c.addr = accepter.Addr
-	c.port = accepter.Port
 
-	gw.appendSocket(c)
-
-	logger.Trace(self.Self().GetID(), "accept client %s:%d\n", accepter.Addr.String(), c.port)
+	ply := gw.cps.alloc(accepter.Addr, accepter.Port)
+	_, err := gw.cps.register(accepter.Handle, ply)
+	if err != nil {
+		//关闭连接
+		network.OperClose(accepter.Handle)
+		gw.cps.free(ply)
+		logger.Trace(self.Self().GetID(), "accept player closed: %v, %d-%s:%d", err,
+			accepter.Handle,
+			accepter.Addr.String(),
+			accepter.Port)
+		return
+	}
+	gw.cps.free(ply)
+	logger.Trace(self.Self().GetID(), "accept player %d-%s:%d\n", accepter.Handle, accepter.Addr.String(), accepter.Port)
 }
 
 func (gw *Gateway) onRecv(self actor.Context, message interface{}) {
@@ -128,9 +122,9 @@ func (gw *Gateway) onRecv(self actor.Context, message interface{}) {
 }
 
 func (gw *Gateway) onClose(self actor.Context, message interface{}) {
-	closer := message.(network.NetClose)
+	//closer := message.(network.NetClose)
 
-	c := gw.removeSocket(closer.Handle)
+	/*c := gw.removeSocket(closer.Handle)
 	if c != nil {
 		logger.Trace(self.Self().GetID(),
 			"close client socket:%d playID:%d %s:%d\n",
@@ -144,7 +138,7 @@ func (gw *Gateway) onClose(self actor.Context, message interface{}) {
 		}
 
 		clientPool.Put(c)
-	}
+	}*/
 }
 
 // 路由到登陆服务器
