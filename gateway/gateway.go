@@ -1,12 +1,14 @@
 package gateway
 
 import (
-	"flag"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/yamakiller/magicNet/core"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/engine/logger"
+	"github.com/yamakiller/magicNet/engine/util"
 	"github.com/yamakiller/magicNet/network"
 	"github.com/yamakiller/magicNet/service"
 )
@@ -23,6 +25,7 @@ type Gateway struct {
 	//
 	id   int32
 	addr string
+	max  int
 	//
 	rtb routeTable
 	//
@@ -37,13 +40,18 @@ func (gw *Gateway) InitService() error {
 		return err
 	}
 
-	logger.Info(0, "Gateway Start Connect Service")
+	gatewayEnv := util.GetEnvMap(util.GetEnvRoot(), "gateway")
+	if gatewayEnv == nil {
+		return errors.New("gateway configuration information does not exist ")
+	}
+
+	gw.id = int32(util.GetEnvInt(gatewayEnv, "id", 1))
+	gw.addr = util.GetEnvString(gatewayEnv, "addr", "0.0.0.0:7850")
+	gw.max = util.GetEnvInt(gatewayEnv, "max", 1024)
+
+	logger.Info(0, "Gateway Start Connect Service ID:%d", gw.id)
 	gw.cps.init(gw.id)
-	//注册协议及路由
-	//gw.rtb.register(xxxx, "login/service")
-	//1.连接其它逻辑服务器
-	//1-1.后面处理
-	//2.启动网络服务
+
 	gw.nsrv = service.Make("Gateway/network/tcp", func() service.IService {
 		srv := &service.TCPService{Addr: gw.addr,
 			CCMax:    32,
@@ -63,16 +71,42 @@ func (gw *Gateway) InitService() error {
 
 // CloseService : 关闭网关服务
 func (gw *Gateway) CloseService() {
-	//1.关闭所有的连接
+	curID := gw.nsrv.ID()
+	logger.Info(curID, "Start shutting down gateway services")
+	hs := gw.cps.handles()
+	logger.Info(curID, "Start closing the connection number of %d", len(hs))
+
+	for gw.cps.size() > 0 {
+		chk := 0
+		for i := 0; i < len(hs); i++ {
+			network.OperClose(hs[i].SocketID())
+		}
+
+		for {
+			time.Sleep(time.Duration(500) * time.Microsecond)
+			if gw.cps.size() <= 0 {
+				break
+			}
+
+			logger.Info(curID, "Remaining connections to be closed number of %d", gw.cps.size())
+			chk++
+			if chk > 6 {
+				break
+			}
+		}
+	}
+
+	logger.Info(curID, "Closing the connection has been completed")
 
 	gw.nsrv.Shutdown()
 	gw.dsrv.CloseService()
+
+	logger.Info(curID, "Gateway Services closed")
 }
 
 // VarValue : Command 变量绑定
 func (gw *Gateway) VarValue() {
 	gw.dcmd.VarValue()
-	flag.StringVar(&gw.addr, "p", "0.0.0.0:7850", "gateway addr")
 }
 
 // LineOption :
@@ -80,31 +114,18 @@ func (gw *Gateway) LineOption() {
 	gw.dcmd.LineOption()
 }
 
-/*func (gw *Gateway) appendSocket(c *client) {
-
-}
-
-func (gw *Gateway) removeSocket(sock int32) *client {
-	var tmpID = ((uint64(gw.id) << 32) & uint64(gw.id))
-	gw.csl.Lock()
-	c := gw.csocks[tmpID]
-	if c != nil {
-		if c.playID > 0 && gw.cplays[c.playID] != nil {
-			delete(gw.cplays, c.playID)
-		}
-		delete(gw.csocks, tmpID)
-	}
-	gw.csl.Unlock()
-	return c
-}*/
-
 func (gw *Gateway) onAccept(self actor.Context, message interface{}) {
 	accepter := message.(network.NetAccept)
+	if gw.cps.size()+1 > gw.max {
+		network.OperClose(accepter.Handle)
+		logger.Warning(self.Self().GetID(), "accept player fulled")
+		return
+	}
 
 	ply := gw.cps.alloc(accepter.Addr, accepter.Port)
 	_, err := gw.cps.register(accepter.Handle, ply)
 	if err != nil {
-		//关闭连接
+		//close-socket
 		network.OperClose(accepter.Handle)
 		gw.cps.free(ply)
 		logger.Trace(self.Self().GetID(), "accept player closed: %v, %d-%s:%d", err,
@@ -122,23 +143,33 @@ func (gw *Gateway) onRecv(self actor.Context, message interface{}) {
 }
 
 func (gw *Gateway) onClose(self actor.Context, message interface{}) {
-	//closer := message.(network.NetClose)
+	closer := message.(network.NetClose)
+	hid := gw.cps.tomap(closer.Handle)
+	if hid == 0 {
+		logger.Trace(self.Self().GetID(), "close unfind map-id socket %d", closer.Handle)
+		return
+	}
 
-	/*c := gw.removeSocket(closer.Handle)
-	if c != nil {
-		logger.Trace(self.Self().GetID(),
-			"close client socket:%d playID:%d %s:%d\n",
-			closer.Handle,
-			c.playID,
-			c.addr.String(),
-			c.port)
+	closeHandle := util.NetHandle{}
+	closeHandle.Generate(gw.id, 0, int32(hid), closer.Handle)
 
-		if c.playID > 0 {
-			//广播离线
-		}
+	ply := gw.cps.grap(&closeHandle)
+	if ply == nil {
+		logger.Trace(self.Self().GetID(), "close unfind player %d-%d-%d-%d",
+			closeHandle.GatewayID(),
+			closeHandle.WorldID(),
+			closeHandle.HandleID(),
+			closeHandle.SocketID())
+		goto unline
+	}
 
-		clientPool.Put(c)
-	}*/
+	closeHandle = ply.handle
+	gw.cps.remove(&closeHandle)
+	gw.cps.free(ply)
+
+unline:
+	//通知所有服务器，这个对象已下线
+	//closeHandle
 }
 
 // 路由到登陆服务器
