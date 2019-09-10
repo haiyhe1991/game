@@ -73,6 +73,8 @@ var playerPool = sync.Pool{
 type gatePlays struct {
 	d     int32
 	s     []*player
+	smap  map[int32]uint16
+	sz    int
 	seqID uint16
 	sync  sync.Mutex
 }
@@ -80,6 +82,11 @@ type gatePlays struct {
 func (gpls *gatePlays) init(gatewayID int32) {
 	gpls.d = gatewayID
 	gpls.s = make([]*player, constPalyerMax)
+	gpls.smap = make(map[int32]uint16, 64)
+}
+
+func (gpls *gatePlays) size() int {
+	return gpls.sz
 }
 
 func (gpls *gatePlays) alloc(addr net.IP, port int) *player {
@@ -103,6 +110,8 @@ func (gpls *gatePlays) register(sock int32, pe *player) (util.NetHandle, error) 
 			gpls.seqID = key + 1
 			gpls.s[hash] = pe
 			gpls.s[hash].ref = 2
+			gpls.smap[sock] = key
+			gpls.sz++
 			gpls.sync.Unlock()
 			return handle, nil
 		}
@@ -117,6 +126,10 @@ func (gpls *gatePlays) remove(handle *util.NetHandle) {
 	if gpls.s[hash] != nil && gpls.s[hash].handle.HandleID() == handle.HandleID() {
 		pe := gpls.s[hash]
 		gpls.s[hash] = nil
+		if _, ok := gpls.smap[pe.handle.SocketID()]; ok {
+			delete(gpls.smap, pe.handle.SocketID())
+		}
+		gpls.sz--
 		pe.ref--
 		if pe.ref <= 0 {
 			playerPool.Put(pe)
@@ -161,4 +174,31 @@ func (gpls *gatePlays) free(pe *player) {
 		playerPool.Put(pe)
 	}
 	gpls.sync.Unlock()
+}
+
+func (gpls *gatePlays) tomap(sock int32) uint16 {
+	gpls.sync.Lock()
+	if v, ok := gpls.smap[sock]; ok {
+		gpls.sync.Unlock()
+		return v
+	}
+	gpls.sync.Unlock()
+	return 0
+}
+
+func (gpls *gatePlays) handles() []util.NetHandle {
+
+	gpls.sync.Lock()
+	i := 0
+	hs := make([]util.NetHandle, gpls.sz)
+	for _, pe := range gpls.s {
+		if pe == nil {
+			continue
+		}
+
+		hs[i] = pe.handle
+		i++
+	}
+	gpls.sync.Unlock()
+	return hs
 }
