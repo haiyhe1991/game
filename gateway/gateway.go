@@ -2,8 +2,12 @@ package gateway
 
 import (
 	"errors"
-	"fmt"
 	"time"
+	"unsafe"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/yamakiller/magicNet/script/stack"
+	"github.com/yamakiller/mgolua/mlua"
 
 	"github.com/yamakiller/magicNet/core"
 	"github.com/yamakiller/magicNet/engine/actor"
@@ -27,31 +31,85 @@ type Gateway struct {
 	addr string
 	max  int
 	//
-	rtb routeTable
+	limitMax int
+	// lua state
+	spt *stack.LuaStack
+	//  routing table
+	rtb *routeTable
+	//  connect table
 	//
 	cps gatePlays
 }
 
-// InitService : 初始化网关服务
-func (gw *Gateway) InitService() error {
-	logger.Info(0, "Gateway Service Start")
+func registerRouteProto(L *mlua.State) int {
+	gwPtr := L.ToLightGoStruct(L.UpvalueIndex(1))
+	if gwPtr == nil {
+		logger.Fatal(0, "Gateway Object Lose")
+		return 0
+	}
+
+	gw := (*Gateway)(gwPtr)
+	argsNum := L.GetTop()
+	if argsNum < 2 {
+		return L.Error("register route proto need need 2-3 parameters")
+	}
+
+	name := L.ToCheckString(1)
+	route := L.ToCheckString(2)
+	auth := true
+	if argsNum > 2 {
+		auth = L.ToBoolean(3)
+	}
+
+	//fmt.Println(proto.MessageType(name))
+	msgType := proto.MessageType(name)
+	if msgType == nil {
+		logger.Error(0, "Gateway Registration %s routing protocol error ", name)
+		return 0
+	}
+
+	gw.rtb.register(msgType, route, auth)
+	return 0
+}
+
+func (gw *Gateway) doInit() error {
+
 	gw.dsrv = &core.DefaultService{}
+	gw.rtb = &routeTable{make(map[interface{}]protoRegister, 32)}
 	if err := gw.dsrv.InitService(); err != nil {
 		return err
 	}
 
 	gatewayEnv := util.GetEnvMap(util.GetEnvRoot(), "gateway")
 	if gatewayEnv == nil {
-		return errors.New("gateway configuration information does not exist ")
+		return errors.New("Gateway configuration information does not exist ")
 	}
 
 	gw.id = int32(util.GetEnvInt(gatewayEnv, "id", 1))
 	gw.addr = util.GetEnvString(gatewayEnv, "addr", "0.0.0.0:7850")
 	gw.max = util.GetEnvInt(gatewayEnv, "max", 1024)
-
-	logger.Info(0, "Gateway Start Connect Service ID:%d", gw.id)
 	gw.cps.init(gw.id)
 
+	return nil
+}
+
+func (gw *Gateway) doScript() error {
+	gw.spt = stack.NewLuaStack()
+	gw.spt.GetLuaState().OpenLibs()
+	gw.spt.AddSreachPath("./script")
+	//register the registerRouteProto function and set gw
+	gw.spt.GetLuaState().PushGoClosure(registerRouteProto, uintptr(unsafe.Pointer(gw)))
+	gw.spt.GetLuaState().SetGlobal("registerRouteProto")
+
+	if _, err := gw.spt.ExecuteScriptFile("./script/gateway.lua"); err != nil {
+		return err
+	}
+
+	logger.Info(0, "Gateway Start Script[lua stack]")
+	return nil
+}
+
+func (gw *Gateway) doNetwork() {
 	gw.nsrv = service.Make("Gateway/network/tcp", func() service.IService {
 		srv := &service.TCPService{Addr: gw.addr,
 			CCMax:    32,
@@ -61,10 +119,25 @@ func (gw *Gateway) InitService() error {
 		}
 
 		srv.Init()
-		//注册协议
-		//srv.RegisterMethod
+
 		return srv
 	}).(*service.TCPService)
+}
+
+// InitService : 初始化网关服务
+func (gw *Gateway) InitService() error {
+	logger.Info(0, "Gateway Service Start")
+	if err := gw.doInit(); err != nil {
+		return err
+	}
+
+	if err := gw.doScript(); err != nil {
+		return err
+	}
+
+	gw.doNetwork()
+
+	logger.Info(0, "Gateway Start Connect Service ID:%d", gw.id)
 
 	return nil
 }
@@ -139,7 +212,74 @@ func (gw *Gateway) onAccept(self actor.Context, message interface{}) {
 }
 
 func (gw *Gateway) onRecv(self actor.Context, message interface{}) {
-	fmt.Println("onRecv...................")
+	data := message.(network.NetChunk)
+	hid := gw.cps.tomap(data.Handle)
+	if hid == 0 {
+		logger.Trace(self.Self().GetID(), "recv error closed unfind map-id socket %d", data.Handle)
+		network.OperClose(data.Handle)
+		return
+	}
+
+	recvHandle := util.NetHandle{}
+	recvHandle.Generate(gw.id, 0, int32(hid), data.Handle)
+
+	ply := gw.cps.grap(&recvHandle)
+	if ply == nil {
+		logger.Trace(self.Self().GetID(), "recv unfind player %d-%d-%d-%d",
+			recvHandle.GatewayID(),
+			recvHandle.WorldID(),
+			recvHandle.HandleID(),
+			recvHandle.SocketID())
+		return
+	}
+
+	var (
+		space  int
+		writed int
+		wby    int
+		pos    int
+	)
+
+	for {
+		space = gw.limitMax - ply.data.Len()
+		wby = len(data.Data) - writed
+		if space > 0 && wby > 0 {
+			if space > wby {
+				space = wby
+			}
+
+			_, err := ply.data.Write(data.Data[pos : pos+space])
+			if err != nil {
+				logger.Trace(self.Self().GetID(), "recv error %s socket %d", err.Error(), data.Handle)
+				network.OperClose(data.Handle)
+				goto freeplay
+			}
+
+			pos += space
+			wby += space
+		}
+
+		//分解数据包
+		for {
+
+			//没有数据可写且没有包可拆
+			if wby == 0 {
+				goto freeplay
+			}
+		}
+		/*if wbytes > 0 {
+			if wbytes > len(data.Data)
+			_, err := ply.data.Write(data.Data[pos : pos+wbytes])
+			pos += wbytes
+			if err != nil {
+				logger.Trace(self.Self().GetID(), "recv error %s socket %d", err.Error(), data.Handle)
+				network.OperClose(data.Handle)
+				goto freeplay
+			}
+		}*/
+	}
+freeplay:
+	gw.cps.free(ply)
 }
 
 func (gw *Gateway) onClose(self actor.Context, message interface{}) {

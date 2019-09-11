@@ -6,8 +6,8 @@ type routeTable struct {
 	tb map[interface{}]protoRegister
 }
 
-func (rt *routeTable) register(proto interface{}, route string) {
-	rt.tb[reflect.TypeOf(proto)] = protoRegister{proto: proto, route: route}
+func (rt *routeTable) register(proto interface{}, route string, auth bool) {
+	rt.tb[proto] = protoRegister{proto: proto, route: route, auth: auth}
 }
 
 func (rt *routeTable) isAllowable(msg interface{}, route string) bool {
