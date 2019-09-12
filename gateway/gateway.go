@@ -30,8 +30,6 @@ type Gateway struct {
 	id   int32
 	addr string
 	max  int
-	//
-	limitMax int
 	// lua state
 	spt *stack.LuaStack
 	//  routing table
@@ -61,7 +59,6 @@ func registerRouteProto(L *mlua.State) int {
 		auth = L.ToBoolean(3)
 	}
 
-	//fmt.Println(proto.MessageType(name))
 	msgType := proto.MessageType(name)
 	if msgType == nil {
 		logger.Error(0, "Gateway Registration %s routing protocol error ", name)
@@ -238,10 +235,14 @@ func (gw *Gateway) onRecv(self actor.Context, message interface{}) {
 		writed int
 		wby    int
 		pos    int
+
+		pkName string
+		pkData []byte
+		pkErro error
 	)
 
 	for {
-		space = gw.limitMax - ply.data.Len()
+		space = constPlayerBufferLimit - ply.data.Len()
 		wby = len(data.Data) - writed
 		if space > 0 && wby > 0 {
 			if space > wby {
@@ -259,24 +260,29 @@ func (gw *Gateway) onRecv(self actor.Context, message interface{}) {
 			wby += space
 		}
 
-		//分解数据包
 		for {
+			pkName, pkData, pkErro = extAgreeAnalysis(ply.data)
+			if pkErro != nil {
+				logger.Error(self.Self().GetID(), "recv error %s socket %d closing play", pkErro.Error(), data.Handle)
+				network.OperClose(data.Handle)
+				goto freeplay
+			}
 
-			//没有数据可写且没有包可拆
+			if pkData != nil {
+				pkErro = gw.onRoute(ply, pkName, pkData)
+				if pkErro != nil {
+					logger.Error(self.Self().GetID(), "route error %s socket %d closing play", pkErro.Error(), data.Handle)
+					network.OperClose(data.Handle)
+					goto freeplay
+				}
+
+				continue
+			}
+
 			if wby == 0 {
 				goto freeplay
 			}
 		}
-		/*if wbytes > 0 {
-			if wbytes > len(data.Data)
-			_, err := ply.data.Write(data.Data[pos : pos+wbytes])
-			pos += wbytes
-			if err != nil {
-				logger.Trace(self.Self().GetID(), "recv error %s socket %d", err.Error(), data.Handle)
-				network.OperClose(data.Handle)
-				goto freeplay
-			}
-		}*/
 	}
 freeplay:
 	gw.cps.free(ply)
@@ -306,26 +312,51 @@ func (gw *Gateway) onClose(self actor.Context, message interface{}) {
 	closeHandle = ply.handle
 	gw.cps.remove(&closeHandle)
 	gw.cps.free(ply)
-
 unline:
-	//通知所有服务器，这个对象已下线
-	//closeHandle
+	gw.onPushOFFLine(&closeHandle)
+}
+
+//
+func (gw *Gateway) onRoute(ply *player, name string, data []byte) error {
+	msgType := proto.MessageType(name)
+	if msgType == nil {
+		logger.Error(gw.nsrv.ID(), "route error %s", errRouteAgreeUnDefined.Error())
+		return errRouteAgreeUnDefined
+	}
+
+	p := gw.rtb.get(msgType)
+	if p == nil {
+		logger.Error(gw.nsrv.ID(), "route error %s", errRouteAgreeUnRegister.Error())
+		return errRouteAgreeUnRegister
+	}
+
+	if p.auth && ply.auth == 0 {
+		logger.Error(gw.nsrv.ID(), "route error Protocol needs to be verified, this connection is not verified and not verified")
+		return errRoutePlayerUnverified
+	}
+
+	return nil
 }
 
 // 路由到登陆服务器
-func (gw *Gateway) onRouteLogin(self actor.Context, message interface{}) {
+func (gw *Gateway) onRouteLogin(message interface{}) {
 
 }
 
-func (gw *Gateway) onRouteWorld(self actor.Context, message interface{}) {
+func (gw *Gateway) onRouteWorld(message interface{}) {
 
 }
 
 // 路由数据转发到客户端
-func (gw *Gateway) onRouteClient(self actor.Context, message interface{}) {
+func (gw *Gateway) onRouteClient(message interface{}) {
 
 }
 
-func (gw *Gateway) onRouteLoginClient(self actor.Context, message interface{}) {
+func (gw *Gateway) onRouteLoginClient(message interface{}) {
+
+}
+
+//
+func (gw *Gateway) onPushOFFLine(handle *util.NetHandle) {
 
 }

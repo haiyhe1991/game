@@ -14,6 +14,8 @@ const (
 	constPalyerMax = 65535
 	//playerIDMask play ID of mask
 	constPlayerIDMask = 0xFF
+	//playerBufferLimit Read buffer Max Cap
+	constPlayerBufferLimit = 4096
 )
 
 var (
@@ -51,6 +53,7 @@ func (st *remoteStat) update(tts uint64) {
 
 type player struct {
 	handle util.NetHandle
+	auth   uint64
 	data   *bytes.Buffer
 	stat   remoteStat
 	addrs  remoteInfo
@@ -62,6 +65,7 @@ var playerPool = sync.Pool{
 		b := new(player)
 		if b.data == nil {
 			b.data = bytes.NewBuffer([]byte{})
+			b.data.Grow(constPlayerBufferLimit)
 		} else {
 			b.data.Reset()
 		}
