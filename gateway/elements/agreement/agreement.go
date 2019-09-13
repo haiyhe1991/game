@@ -1,9 +1,11 @@
-package gateway
+package agreement
 
 import (
 	"bytes"
 	"encoding/binary"
 	"errors"
+
+	"github.com/yamakiller/game/gateway/elements"
 )
 
 type protoRegister struct {
@@ -26,14 +28,28 @@ const (
 	constAgreeNameLengthShift = constAgreeDataLengthShift - constAgreeNameLengthBit
 	constAgreeNameLengthMask  = 0x1f
 
-	constAgreeSingleLimit = (constPlayerBufferLimit >> 1) - constAgreeHeader
+	constAgreeSingleLimit = (elements.ConstPlayerBufferLimit >> 1) - constAgreeHeader
 )
 
 var (
-	errProtoIllegal = errors.New("An illegal agreement")
+	//ErrProtoIllegal An illegal agreement
+	ErrProtoIllegal = errors.New("An illegal agreement")
 )
 
-func extAgreeAnalysis(data *bytes.Buffer) (string, []byte, error) {
+//ForwardMessage Forward data event
+type ForwardMessage struct {
+	Handle        uint64
+	AgreementName string
+	ServerName    string
+	Data          []byte
+}
+
+//CheckConnectMessage Check the connection status event to achieve automatic reconnection after disconnection
+type CheckConnectMessage struct {
+}
+
+// ExtAnalysis Play protocol data analysis
+func ExtAnalysis(data *bytes.Buffer) (string, []byte, error) {
 
 	if data.Len() < constAgreeHeader {
 		return "", nil, nil
@@ -59,7 +75,7 @@ func extAgreeAnalysis(data *bytes.Buffer) (string, []byte, error) {
 
 	if (dl + nl) > constAgreeSingleLimit {
 		data.Reset()
-		return "", nil, errProtoIllegal
+		return "", nil, ErrProtoIllegal
 	}
 
 	pname := string(data.Next(int(nl)))

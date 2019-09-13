@@ -1,20 +1,9 @@
 package gateway
 
 import (
-	"errors"
-	"time"
-	"unsafe"
-
-	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/magicNet/script/stack"
-	"github.com/yamakiller/mgolua/mlua"
 
 	"github.com/yamakiller/magicNet/core"
-	"github.com/yamakiller/magicNet/engine/actor"
-	"github.com/yamakiller/magicNet/engine/logger"
-	"github.com/yamakiller/magicNet/engine/util"
-	"github.com/yamakiller/magicNet/network"
-	"github.com/yamakiller/magicNet/service"
 )
 
 // Gateway : 网关服务对象
@@ -25,7 +14,6 @@ type Gateway struct {
 	//
 	dsrv *core.DefaultService
 	dcmd core.DefaultCMDLineOption
-	nsrv *service.TCPService
 	//
 	id   int32
 	addr string
@@ -33,13 +21,10 @@ type Gateway struct {
 	// lua state
 	spt *stack.LuaStack
 	//  routing table
-	rtb *routeTable
-	//  connect table
-	//
-	cps gatePlays
+	//rtb *elements.RouteTable
 }
 
-func registerRouteProto(L *mlua.State) int {
+/*func registerRouteProto(L *mlua.State) int {
 	gwPtr := L.ToLightGoStruct(L.UpvalueIndex(1))
 	if gwPtr == nil {
 		logger.Fatal(0, "Gateway Object Lose")
@@ -359,4 +344,4 @@ func (gw *Gateway) onRouteLoginClient(message interface{}) {
 //
 func (gw *Gateway) onPushOFFLine(handle *util.NetHandle) {
 
-}
+}*/
