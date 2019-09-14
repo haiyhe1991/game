@@ -55,9 +55,17 @@ func (gw *GatewayFrame) InitService() error {
 
 //CloseService close gateway system
 func (gw *GatewayFrame) CloseService() {
-	//1.停止内部连接服务
-	//2.停止外部监听服务
-	//3.停止脚本服务
+
+	if gw.netService != nil {
+		gw.netService.Shutdown()
+		gw.netService = nil
+	}
+
+	if gw.conService != nil {
+		gw.conService.Shutdown()
+		gw.conService = nil
+	}
+
 	if gw.luaService != nil {
 		gw.luaService.Shutdown()
 		gw.luaService = nil
