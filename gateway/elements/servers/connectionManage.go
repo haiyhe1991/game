@@ -1,7 +1,7 @@
 package servers
 
 import (
-	"github.com/yamakiller/game/gateway/elements"
+	"github.com/yamakiller/game/gateway/constant"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/engine/logger"
 	"github.com/yamakiller/magicNet/network"
@@ -31,7 +31,7 @@ func (cmsr *ConnectionManager) GetGroup(srvName string) *ConnectionGroup {
 	return &cgp
 }
 
-//GetHandle
+//GetHandle Get the connection object
 func (cmsr *ConnectionManager) GetHandle(sock int32) *Connection {
 	var conn *Connection
 	for _, v := range cmsr.serverGroup {
@@ -65,7 +65,7 @@ func (cmsr *ConnectionManager) CheckConnect(context actor.Context) {
 //AutoConnect Auto connection service
 func AutoConnect(context actor.Context, c *Connection) error {
 
-	h, err := network.OperTCPConnect(context.Self(), c.Addr, elements.ConstConnectChanMax)
+	h, err := network.OperTCPConnect(context.Self(), c.Addr, constant.ConstConnectChanMax)
 	if err != nil {
 		return err
 	}

@@ -1,13 +1,17 @@
-package ServiceComponent
+package component
 
 import (
 	"time"
 
+	"github.com/yamakiller/magicNet/timer"
+
 	"github.com/gogo/protobuf/proto"
+	"github.com/yamakiller/game/common/agreement"
+	"github.com/yamakiller/game/gateway/constant"
 	"github.com/yamakiller/game/gateway/elements"
-	"github.com/yamakiller/game/gateway/elements/agreement"
 	"github.com/yamakiller/game/gateway/elements/clients"
 	"github.com/yamakiller/game/gateway/elements/route"
+	pkg "github.com/yamakiller/game/proto"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/engine/logger"
 	"github.com/yamakiller/magicNet/engine/util"
@@ -17,12 +21,11 @@ import (
 
 // NewTCPNetworkService Create a tcp network service
 func NewTCPNetworkService() *NetworkService {
-	return service.Make(elements.ConstNetworkServiceName, func() service.IService {
+	return service.Make(constant.ConstNetworkServiceName, func() service.IService {
 
 		handle := &NetworkService{TCPService: service.TCPService{
-			Addr:  elements.GatewayAddr,
-			CCMax: elements.GatewayCCMax},
-			pm: &clients.PlayManager{},
+			Addr:  constant.GatewayAddr,
+			CCMax: constant.GatewayCCMax},
 		}
 
 		handle.OnAccept = handle.onAccept
@@ -37,20 +40,20 @@ func NewTCPNetworkService() *NetworkService {
 // NetworkService Components that provide network services
 type NetworkService struct {
 	service.TCPService
-	pm *clients.PlayManager
 }
 
 //Init Initialize the network service object
 func (ns *NetworkService) Init() {
-	ns.pm.Initial(elements.GatewayID)
+	elements.Clients.Initial(constant.GatewayID)
 	ns.TCPService.Init()
+	ns.RegisterMethod(agreement.CertificationConfirmation{}, ns.onConfirm)
 }
 
 //Shutdown Termination of network services
 func (ns *NetworkService) Shutdown() {
 	logger.Info(ns.ID(), "Network Listen [TCP/IP] Service Closing connection")
-	hs := ns.pm.GetHandls()
-	for ns.pm.Size() > 0 {
+	hs := elements.Clients.GetHandls()
+	for elements.Clients.Size() > 0 {
 		chk := 0
 		for i := 0; i < len(hs); i++ {
 			network.OperClose(hs[i].SocketID())
@@ -58,11 +61,11 @@ func (ns *NetworkService) Shutdown() {
 
 		for {
 			time.Sleep(time.Duration(500) * time.Microsecond)
-			if ns.pm.Size() <= 0 {
+			if elements.Clients.Size() <= 0 {
 				break
 			}
 
-			logger.Info(ns.ID(), "Network Listen [TCP/IP] Service The remaining %d connections need to be closed", ns.pm.Size())
+			logger.Info(ns.ID(), "Network Listen [TCP/IP] Service The remaining %d connections need to be closed", elements.Clients.Size())
 			chk++
 			if chk > 6 {
 				break
@@ -77,13 +80,13 @@ func (ns *NetworkService) Shutdown() {
 
 func (ns *NetworkService) onAccept(self actor.Context, message interface{}) {
 	accepter := message.(network.NetAccept)
-	if ns.pm.Size()+1 > elements.GatewayMaxConnect {
+	if elements.Clients.Size()+1 > constant.GatewayMaxConnect {
 		network.OperClose(accepter.Handle)
 		logger.Warning(self.Self().GetID(), "accept player fulled")
 		return
 	}
 
-	ply, _, err := ns.pm.Occupy(accepter.Handle, accepter.Addr, accepter.Port)
+	client, _, err := elements.Clients.Occupy(accepter.Handle, accepter.Addr, accepter.Port)
 	if err != nil {
 		//close-socket
 		network.OperClose(accepter.Handle)
@@ -94,13 +97,21 @@ func (ns *NetworkService) onAccept(self actor.Context, message interface{}) {
 		return
 	}
 
-	ns.pm.Release(ply)
+	network.OperOpen(accepter.Handle)
+	//------------------------------------------------
+	//First handshake and agree on the key
+	shake, _ := proto.Marshal(&pkg.HandshakeResponse{Key: ""})
+	shake = agreement.ExtAssemble(1, "proto.HandshakeResponse", shake, int32(len(shake)))
+	network.OperWrite(accepter.Handle, shake, len(shake))
+	//-------------------------------------------------
+	client.Stat.UpdateOnline(timer.Now())
+	elements.Clients.Release(client)
 	logger.Trace(self.Self().GetID(), "accept player %d-%s:%d\n", accepter.Handle, accepter.Addr.String(), accepter.Port)
 }
 
 func (ns *NetworkService) onRecv(self actor.Context, message interface{}) {
 	data := message.(network.NetChunk)
-	hid := ns.pm.ToHandleID(data.Handle)
+	hid := elements.Clients.ToHandleID(data.Handle)
 	if hid == 0 {
 		logger.Trace(self.Self().GetID(), "recv error closed unfind map-id socket %d", data.Handle)
 		network.OperClose(data.Handle)
@@ -108,10 +119,10 @@ func (ns *NetworkService) onRecv(self actor.Context, message interface{}) {
 	}
 
 	recvHandle := util.NetHandle{}
-	recvHandle.Generate(elements.GatewayID, 0, int32(hid), data.Handle)
+	recvHandle.Generate(constant.GatewayID, 0, int32(hid), data.Handle)
 
-	ply := ns.pm.Grap(&recvHandle)
-	if ply == nil {
+	client := elements.Clients.Grap(&recvHandle)
+	if client == nil {
 		logger.Trace(self.Self().GetID(), "recv unfind player %d-%d-%d-%d",
 			recvHandle.GatewayID(),
 			recvHandle.WorldID(),
@@ -132,65 +143,67 @@ func (ns *NetworkService) onRecv(self actor.Context, message interface{}) {
 	)
 
 	for {
-		space = elements.ConstPlayerBufferLimit - ply.DataLen()
+		space = constant.ConstPlayerBufferLimit - client.DataLen()
 		wby = len(data.Data) - writed
 		if space > 0 && wby > 0 {
 			if space > wby {
 				space = wby
 			}
 
-			_, err := ply.DataWrite(data.Data[pos : pos+space])
+			_, err := client.DataWrite(data.Data[pos : pos+space])
 			if err != nil {
 				logger.Trace(self.Self().GetID(), "recv error %s socket %d", err.Error(), data.Handle)
 				network.OperClose(data.Handle)
-				goto releaseplay
+				goto releaseclient
 			}
 
 			pos += space
 			wby += space
+
+			client.Stat.UpdateRecv(timer.Now(), uint64(space))
 		}
 
 		for {
-			pkName, pkData, pkErro = ply.DataAnalysis()
+			pkName, pkData, pkErro = client.DataAnalysis()
 			if pkErro != nil {
 				logger.Error(self.Self().GetID(), "recv error %s socket %d closing play", pkErro.Error(), data.Handle)
 				network.OperClose(data.Handle)
-				goto releaseplay
+				goto releaseclient
 			}
 
 			if pkData != nil {
-				pkErro = ns.onRoute(ply, pkName, pkData)
+				pkErro = ns.onRoute(client, pkName, pkData)
 				if pkErro != nil {
 					logger.Error(self.Self().GetID(), "route error %s socket %d closing play", pkErro.Error(), data.Handle)
 					network.OperClose(data.Handle)
-					goto releaseplay
+					goto releaseclient
 				}
 
 				continue
 			}
 
 			if wby == 0 {
-				goto releaseplay
+				goto releaseclient
 			}
 		}
 	}
-releaseplay:
-	ns.pm.Release(ply)
+releaseclient:
+	elements.Clients.Release(client)
 }
 
 func (ns *NetworkService) onClose(self actor.Context, message interface{}) {
 	closer := message.(network.NetClose)
-	hid := ns.pm.ToHandleID(closer.Handle)
+	hid := elements.Clients.ToHandleID(closer.Handle)
 	if hid == 0 {
 		logger.Trace(self.Self().GetID(), "close unfind map-id socket %d", closer.Handle)
 		return
 	}
 
 	closeHandle := util.NetHandle{}
-	closeHandle.Generate(elements.GatewayID, 0, int32(hid), closer.Handle)
+	closeHandle.Generate(constant.GatewayID, 0, int32(hid), closer.Handle)
 
-	ply := ns.pm.Grap(&closeHandle)
-	if ply == nil {
+	client := elements.Clients.Grap(&closeHandle)
+	if client == nil {
 		logger.Trace(self.Self().GetID(), "close unfind player %d-%d-%d-%d",
 			closeHandle.GatewayID(),
 			closeHandle.WorldID(),
@@ -199,14 +212,29 @@ func (ns *NetworkService) onClose(self actor.Context, message interface{}) {
 		goto unline
 	}
 
-	closeHandle = ply.Handle
-	ns.pm.Erase(&closeHandle)
-	ns.pm.Release(ply)
+	closeHandle = client.Handle
+	elements.Clients.Erase(&closeHandle)
+	elements.Clients.Release(client)
 unline:
 	ns.pushOffline(&closeHandle)
 }
 
-func (ns *NetworkService) onRoute(ply *clients.Player, name string, data []byte) error {
+func (ns *NetworkService) onConfirm(self actor.Context, message interface{}) {
+	confirm := message.(agreement.CertificationConfirmation)
+	confirmHandle := util.NetHandle{}
+	confirmHandle.SetValue(confirm.Handle)
+	client := elements.Clients.Grap(&confirmHandle)
+	if client == nil {
+		logger.Trace(self.Self().GetID(), "Authentication confirmation failed, target connection not found")
+		return
+	}
+
+	client.Auth = timer.Now()
+
+	logger.Debug(self.Self().GetID(), "Connection authentication succeeded %+v", confirmHandle.HandleID)
+}
+
+func (ns *NetworkService) onRoute(client *clients.Client, name string, data []byte) error {
 	msgType := proto.MessageType(name)
 	if msgType == nil {
 		logger.Error(ns.ID(), "route error %s", route.ErrRouteAgreeUnDefined.Error())
@@ -219,20 +247,19 @@ func (ns *NetworkService) onRoute(ply *clients.Player, name string, data []byte)
 		return route.ErrRouteAgreeUnRegister
 	}
 
-	if adr.Auth && ply.Auth == 0 {
+	if adr.Auth && client.Auth == 0 {
 		logger.Error(ns.ID(), "route error Protocol needs to be verified, this connection is not verified and not verified")
 		return route.ErrRoutePlayerUnverified
 	}
 
-	//! 需要将数据发送给连接服务
-	if elements.ConnectServicePID.ID == 0 {
+	if constant.ConnectServicePID.ID == 0 {
 		logger.Error(ns.ID(), "route error Service has not started yet")
 		return route.ErrRouteServiceNotStarted
 	}
 
 	//
-	actor.DefaultSchedulerContext.Send(&elements.ConnectServicePID,
-		&agreement.ForwardMessage{Handle: ply.Handle.GetValue(),
+	actor.DefaultSchedulerContext.Send(&constant.ConnectServicePID,
+		&agreement.ForwardMessage{Handle: client.Handle.GetValue(),
 			AgreementName: name,
 			ServerName:    adr.ServiceName,
 			Data:          data})

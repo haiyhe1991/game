@@ -3,8 +3,8 @@ package framework
 import (
 	"errors"
 
-	"github.com/yamakiller/game/gateway/ServiceComponent"
-	"github.com/yamakiller/game/gateway/elements"
+	"github.com/yamakiller/game/gateway/component"
+	"github.com/yamakiller/game/gateway/constant"
 
 	"github.com/yamakiller/magicNet/core"
 	"github.com/yamakiller/magicNet/engine/util"
@@ -16,7 +16,7 @@ type GatewayFrame struct {
 	core.DefaultEnv
 	core.DefaultLoop
 	//
-	dsrv *core.DefaultService
+	core.DefaultService
 	dcmd core.DefaultCMDLineOption
 	//
 	id   int32
@@ -24,31 +24,35 @@ type GatewayFrame struct {
 	max  int
 
 	//
-	luaService *ServiceComponent.ScriptService
-	conService *ServiceComponent.ConnectService
-	netService *ServiceComponent.NetworkService
+	luaService *component.ScriptService
+	conService *component.ConnectService
+	netService *component.NetworkService
 }
 
 //InitService init gateway system
 func (gw *GatewayFrame) InitService() error {
-	gw.dsrv = &core.DefaultService{}
+	//gw.dsrv = &core.DefaultService{}
+	if err := gw.DefaultService.InitService(); err != nil {
+		return err
+	}
+
 	gatewayEnv := util.GetEnvMap(util.GetEnvRoot(), "gateway")
 	if gatewayEnv == nil {
 		return errors.New("Gateway configuration information does not exist ")
 	}
 
-	elements.GatewayID = int32(util.GetEnvInt(gatewayEnv, "id", 1))
-	elements.GatewayAddr = util.GetEnvString(gatewayEnv, "addr", "0.0.0.0:7850")
-	elements.GatewayMaxConnect = util.GetEnvInt(gatewayEnv, "max", 1024)
-	elements.GatewayCCMax = util.GetEnvInt(gatewayEnv, "chan-max", 32)
-	elements.GatewayLuaScriptPath = util.GetEnvString(gatewayEnv, "lua-script-path", "./script")
-	elements.GatewayLuaScriptFile = util.GetEnvString(gatewayEnv, "lua-script-file", "./script/gateway.lua")
+	constant.GatewayID = int32(util.GetEnvInt(gatewayEnv, "id", 1))
+	constant.GatewayAddr = util.GetEnvString(gatewayEnv, "addr", "0.0.0.0:7850")
+	constant.GatewayMaxConnect = util.GetEnvInt(gatewayEnv, "max", 1024)
+	constant.GatewayCCMax = util.GetEnvInt(gatewayEnv, "chan-max", 32)
+	constant.GatewayLuaScriptPath = util.GetEnvString(gatewayEnv, "lua-script-path", "./script")
+	constant.GatewayLuaScriptFile = util.GetEnvString(gatewayEnv, "lua-script-file", "./script/gateway.lua")
 
-	gw.luaService = &ServiceComponent.ScriptService{}
+	gw.luaService = &component.ScriptService{}
 	gw.luaService.Init()
 
-	gw.conService = ServiceComponent.NewConnService()
-	gw.netService = ServiceComponent.NewTCPNetworkService()
+	gw.conService = component.NewConnService()
+	gw.netService = component.NewTCPNetworkService()
 
 	return nil
 }

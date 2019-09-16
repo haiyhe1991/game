@@ -3,6 +3,8 @@ package servers
 import (
 	"bytes"
 	"sync"
+
+	"github.com/yamakiller/game/common/agreement"
 )
 
 // ConnStat Connection status information
@@ -25,6 +27,22 @@ type Connection struct {
 	sync sync.Mutex
 }
 
+//DataAnalysis Analytic data protocol
+func (cn *Connection) DataAnalysis() (string, uint64, []byte, error) {
+	return agreement.InsideAnalysis(cn.data)
+}
+
+//DataWrite Write data to buffer
+func (cn *Connection) DataWrite(d []byte) (int, error) {
+	return cn.data.Write(d)
+}
+
+// DataLen The size of the data that has been received
+func (cn *Connection) DataLen() int {
+	return cn.data.Len()
+}
+
+// ClearData The size of the data that has been received
 func (cn *Connection) ClearData() {
 	n := cn.data.Len()
 	if n > 0 {

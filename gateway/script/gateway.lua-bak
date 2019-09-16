@@ -1,1 +1,3 @@
-print("test.............................")
+register_route("proto.LoginRequest", "login", false)
+register_route("proto.LoginResponse", "client", false, true)
+register_service_group("login")

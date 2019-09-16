@@ -1,7 +1,6 @@
-package elements
+package constant
 
 import (
-	"github.com/yamakiller/game/gateway/elements/route"
 	"github.com/yamakiller/magicNet/engine/actor"
 )
 
@@ -16,17 +15,17 @@ const (
 	ConstConnectGroupMax = 128
 	//ConstConnectChanMax Maximum chan data buffer limit for connection services
 	ConstConnectChanMax = 256
-	//
+	//ConstConnectForwardErrMax  Push failure maximum retries
 	ConstConnectForwardErrMax = 16
-	//
+	//ConstNetworkServiceName Network service name
 	ConstNetworkServiceName = "Service/Gateway/Network"
-	//
+	//ConstConnectServiceName The name of the connection service
 	ConstConnectServiceName = "Service/Gateway/Connection"
+	//ConstConnectAutoTick Automatic connection detection interval event
+	ConstConnectAutoTick = 100 // Unit millisecond
 )
 
 var (
-	//RouteAddress route address informat
-	RouteAddress *route.Table
 	//GatewayID  gateway service id code
 	GatewayID int32
 	//GatewayMaxConnect Maximum number of connections for the gateway service
@@ -35,16 +34,12 @@ var (
 	GatewayAddr string
 	//GatewayCCMax Gateway connects to the client pipe maximum buffer, the default is 32
 	GatewayCCMax int
-	//GatewayLuaScriptPath
+	//GatewayLuaScriptPath Gateway script search path
 	GatewayLuaScriptPath string
-	//GatewayLuaScriptFile
+	//GatewayLuaScriptFile Gateway default script name
 	GatewayLuaScriptFile string
-	//
+	//ConnectServicePID Connected service ACTOR PID
 	ConnectServicePID actor.PID
-	//
+	//NetworkServicePID ACTOR PID for network services
 	NetworkServicePID actor.PID
 )
-
-func init() {
-	RouteAddress = route.NewTable()
-}

@@ -1,7 +1,8 @@
-package ServiceComponent
+package component
 
 import (
 	"github.com/gogo/protobuf/proto"
+	"github.com/yamakiller/game/gateway/constant"
 	"github.com/yamakiller/game/gateway/elements"
 	"github.com/yamakiller/magicNet/engine/logger"
 	"github.com/yamakiller/magicNet/script/stack"
@@ -13,22 +14,22 @@ type ScriptService struct {
 	handle *stack.LuaStack
 }
 
-//Init
+//Init Initialize the lua script service
 func (sse *ScriptService) Init() {
 	sse.handle = stack.NewLuaStack()
 	sse.handle.GetLuaState().OpenLibs()
-	sse.handle.AddSreachPath(elements.GatewayLuaScriptPath)
+	sse.handle.AddSreachPath(constant.GatewayLuaScriptPath)
 	//register the registerRouteProto function and set gw
 	sse.handle.GetLuaState().Register("register_route", luaRegisterRoute)
 	sse.handle.GetLuaState().Register("register_service_group", luaRegisterServiceGroup)
 	sse.handle.GetLuaState().Register("append_connection", luaAppendServiceConnection)
 
-	if _, err := sse.handle.ExecuteScriptFile(elements.GatewayLuaScriptFile); err != nil {
+	if _, err := sse.handle.ExecuteScriptFile(constant.GatewayLuaScriptFile); err != nil {
 		panic(err)
 	}
 }
 
-//Shutdown
+//Shutdown Close the script service
 func (sse *ScriptService) Shutdown() {
 	if sse.handle == nil {
 		return
@@ -41,14 +42,19 @@ func luaRegisterRoute(L *mlua.State) int {
 
 	argsNum := L.GetTop()
 	if argsNum < 2 {
-		return L.Error("register route need  2-3 parameters")
+		return L.Error("register route need  2-4 parameters")
 	}
 
 	agreementName := L.ToCheckString(1)
 	serviceName := L.ToCheckString(2)
 	auth := true
+	confirm := false
 	if argsNum > 2 {
 		auth = L.ToBoolean(3)
+	}
+
+	if argsNum > 3 {
+		confirm = L.ToBoolean(4)
 	}
 
 	agreementType := proto.MessageType(agreementName)
@@ -57,13 +63,13 @@ func luaRegisterRoute(L *mlua.State) int {
 		return 0
 	}
 
-	elements.RouteAddress.Register(agreementType, agreementName, serviceName, auth)
+	elements.RouteAddress.Register(agreementType, agreementName, serviceName, auth, confirm)
 	return 0
 }
 
 func luaRegisterServiceGroup(L *mlua.State) int {
 	serverName := L.ToCheckString(1)
-	connectManger.Register(serverName)
+	elements.Conns.Register(serverName)
 	return 0
 }
 
@@ -76,7 +82,7 @@ func luaAppendServiceConnection(L *mlua.State) int {
 	serverName := L.ToCheckString(1)
 	serverID := L.ToCheckInteger(2)
 	serverAddr := L.ToCheckString(3)
-	grp := connectManger.GetGroup(serverName)
+	grp := elements.Conns.GetGroup(serverName)
 	if grp == nil {
 		return L.Error("pend service connection error unfind server group")
 	}

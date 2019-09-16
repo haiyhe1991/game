@@ -24,8 +24,8 @@ type Table struct {
 }
 
 //Register Register routing data
-func (t *Table) Register(agreement interface{}, agreementName, serviceName string, auth bool) {
-	t.tb[agreement] = Data{Agreement: agreement, AgreementName: agreementName, ServiceName: serviceName, Auth: auth}
+func (t *Table) Register(agreement interface{}, agreementName, serviceName string, auth bool, confirm bool) {
+	t.tb[agreement] = Data{Agreement: agreement, AgreementName: agreementName, ServiceName: serviceName, Auth: auth, Confirm: confirm}
 }
 
 // Sreach Query a routing information

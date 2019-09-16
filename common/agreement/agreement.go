@@ -4,15 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-
-	"github.com/yamakiller/game/gateway/elements"
 )
-
-type protoRegister struct {
-	proto interface{}
-	route string
-	auth  bool
-}
 
 const (
 	constAgreeHeader          = 3
@@ -29,15 +21,25 @@ const (
 	constAgreeNameLengthMask  = 0x1f
 	constAgreeHandleBit       = 64
 	constAgreeHandle          = 8
-
-	constAgreeSingleLimit       = (elements.ConstPlayerBufferLimit >> 1) - constAgreeHeader
-	constInsideAgreeSingleLimit = constAgreeSingleLimit + constAgreeHandle
 )
 
 var (
 	//ErrProtoIllegal An illegal agreement
 	ErrProtoIllegal = errors.New("An illegal agreement")
 )
+
+var (
+	//AgreeSingleLimit External communication single packet size limit
+	AgreeSingleLimit = 2048
+	//InsideAgreeSingleLimit Internal communication packet size limit
+	InsideAgreeSingleLimit = 2056
+)
+
+// SetSingleLimit Set the communication ticket size limit
+func SetSingleLimit(singleLimit int) {
+	AgreeSingleLimit = singleLimit - constAgreeHeader
+	InsideAgreeSingleLimit = AgreeSingleLimit + constAgreeHandle
+}
 
 //ForwardMessage Forward data event
 type ForwardMessage struct {
@@ -49,6 +51,11 @@ type ForwardMessage struct {
 
 //CheckConnectMessage Check the connection status event to achieve automatic reconnection after disconnection
 type CheckConnectMessage struct {
+}
+
+//CertificationConfirmation Confirm that the login has been successful and change the verification status of the connection.
+type CertificationConfirmation struct {
+	Handle uint64
 }
 
 func getAgreementHeader(data *bytes.Buffer) uint32 {
@@ -72,9 +79,10 @@ func getAgreementNameLength(header uint32) uint32 {
 
 func assembleHeader(version int32, dataLength int32, nameLength int32) []byte {
 	var headInt uint32
-	headInt = uint32((version&constAgreeVersionMask)<<constAgreeVersionShift) &
-		uint32((dataLength&constAgreeDataLengthMask)<<constAgreeDataLengthShift) &
+	headInt = uint32((version&constAgreeVersionMask)<<constAgreeVersionShift) |
+		uint32((dataLength&constAgreeDataLengthMask)<<constAgreeDataLengthShift) |
 		uint32((nameLength&constAgreeNameLengthMask)<<constAgreeNameLengthShift)
+
 	head := make([]byte, 4)
 	binary.BigEndian.PutUint32(head, headInt)
 	return head[1:]
@@ -101,7 +109,7 @@ func InsideAnalysis(data *bytes.Buffer) (string, uint64, []byte, error) {
 		return "", 0, nil, nil
 	}
 
-	if (dl + nl + constAgreeHandle) > constInsideAgreeSingleLimit {
+	if int((dl + nl + constAgreeHandle)) > InsideAgreeSingleLimit {
 		data.Reset()
 		return "", 0, nil, ErrProtoIllegal
 	}
@@ -116,9 +124,8 @@ func InsideAnalysis(data *bytes.Buffer) (string, uint64, []byte, error) {
 //InsideAssemble Assembly Inside protocol
 func InsideAssemble(version int32, handle uint64, agreementName string, data []byte, length int32) []byte {
 	nameLength := int32(len([]rune(agreementName)))
-	//count := constAgreeHeader + nameLength + length
 	buffer := bytes.NewBuffer([]byte{})
-	handleBuffer := make([]byte, 4)
+	handleBuffer := make([]byte, 8)
 
 	buffer.Write(assembleHeader(version, length, nameLength))
 	buffer.WriteString(agreementName)
@@ -130,11 +137,10 @@ func InsideAssemble(version int32, handle uint64, agreementName string, data []b
 	return buffer.Bytes()
 }
 
+// ExtAnalysis Play protocol data analysis
 //------------------------------------------------------------------------------------------
 //  7 Bit Version | 12 Bit data length | 5 Bit AgreementName | AgreementName | data packet |
 //------------------------------------------------------------------------------------------
-
-// ExtAnalysis Play protocol data analysis
 func ExtAnalysis(data *bytes.Buffer) (string, []byte, error) {
 
 	if data.Len() < constAgreeHeader {
@@ -153,7 +159,7 @@ func ExtAnalysis(data *bytes.Buffer) (string, []byte, error) {
 		return "", nil, nil
 	}
 
-	if (dl + nl) > constAgreeSingleLimit {
+	if int((dl + nl)) > AgreeSingleLimit {
 		data.Reset()
 		return "", nil, ErrProtoIllegal
 	}

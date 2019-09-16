@@ -6,4 +6,5 @@ type Data struct {
 	AgreementName string
 	ServiceName   string
 	Auth          bool
+	Confirm       bool
 }
