@@ -5,6 +5,7 @@ import (
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/engine/logger"
 	"github.com/yamakiller/magicNet/network"
+	"github.com/yamakiller/magicNet/util"
 )
 
 //NewManager Create a service connection manager
@@ -19,7 +20,7 @@ type ConnectionManager struct {
 
 //Register Register a service group
 func (cmsr *ConnectionManager) Register(srvName string) {
-	cmsr.serverGroup[srvName] = ConnectionGroup{}
+	cmsr.serverGroup[srvName] = ConnectionGroup{g: util.NewConsistent(20)}
 }
 
 //GetGroup Get a service group
@@ -46,19 +47,19 @@ func (cmsr *ConnectionManager) GetHandle(sock int32) *Connection {
 
 //CheckConnect checking connection state and auto connection service
 func (cmsr *ConnectionManager) CheckConnect(context actor.Context) {
-	var err error
-	for k, v := range cmsr.serverGroup {
-		for i := 0; i < len(v.group); i++ {
-			if v.group[i].ID == 0 || v.group[i].Sock > 0 {
-				continue
-			}
-			err = AutoConnect(context, &v.group[i])
-			if err != nil {
-				logger.Error(context.Self().GetID(), "Connection service failed %s %s-%d-%s", err, k, v.group[i].ID, v.group[i].Addr)
-			}
+	f := func(v interface{}) {
+		c := v.(*Connection)
+		if c.ID == 0 || c.Sock > 0 {
+			return
 		}
+		err := AutoConnect(context, c)
+		if err != nil {
+			logger.Error(context.Self().GetID(), "Connection service failed %s %d-%s", err, c.ID, c.Addr)
+		}
+	}
 
-		cmsr.serverGroup[k] = v
+	for _, v := range cmsr.serverGroup {
+		v.g.Range(f)
 	}
 }
 

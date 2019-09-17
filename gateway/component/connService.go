@@ -97,6 +97,7 @@ func (cse *ConnectService) Shutdown() {
 
 //onForward Push data to target service
 func (cse *ConnectService) onForwardService(context actor.Context, message interface{}) {
+
 	msg := message.(*agreement.ForwardMessage)
 	grp := elements.Conns.GetGroup(msg.ServerName)
 	if grp == nil {
@@ -104,14 +105,17 @@ func (cse *ConnectService) onForwardService(context actor.Context, message inter
 		return
 	}
 
+
 	handle := util.NetHandle{}
 	handle.SetValue(msg.Handle)
 	worldID := handle.WorldID()
-	conn := grp.HashConnection(worldID)
-	if conn.ID == 0 {
+
+	conn, connerr := grp.HashConnection(msg.ServerName, worldID)
+	if connerr != nil {
 		logger.Error(context.Self().GetID(), "Forward message error Target service does not exist [%s]", msg.AgreementName)
 		return
 	}
+
 
 	var (
 		sock int32
@@ -123,6 +127,7 @@ func (cse *ConnectService) onForwardService(context actor.Context, message inter
 		logger.Error(context.Self().GetID(), "Forward message error Failed to assemble internal data packets")
 		return
 	}
+
 
 	ick := 0
 	for {
@@ -168,7 +173,7 @@ func (cse *ConnectService) onCheckConnect(context actor.Context, message interfa
 }
 
 func (cse *ConnectService) onRecv(self actor.Context, message interface{}) {
-	data := message.(network.NetChunk)
+	data := message.(*network.NetChunk)
 	csrv := elements.Conns.GetHandle(data.Handle)
 	if csrv == nil {
 		logger.Error(self.Self().GetID(), "Receive data error did not find service connectio")

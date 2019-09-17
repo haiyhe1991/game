@@ -87,6 +87,6 @@ func luaAppendServiceConnection(L *mlua.State) int {
 		return L.Error("pend service connection error unfind server group")
 	}
 
-	grp.Register(int32(serverID), serverAddr)
+	grp.Register(serverName, int32(serverID), serverAddr)
 	return 0
 }

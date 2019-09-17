@@ -2,7 +2,6 @@ package component
 
 import (
 	"time"
-
 	"github.com/yamakiller/magicNet/timer"
 	"github.com/yamakiller/magicNet/util"
 
@@ -79,10 +78,10 @@ func (ns *NetworkService) Shutdown() {
 }
 
 func (ns *NetworkService) onAccept(self actor.Context, message interface{}) {
-	accepter := message.(network.NetAccept)
+	accepter := message.(*network.NetAccept)
 	if elements.Clients.Size()+1 > constant.GatewayMaxConnect {
 		network.OperClose(accepter.Handle)
-		logger.Warning(self.Self().GetID(), "accept player fulled")
+		logger.Warning(self.Self().GetID(), "accept client fulled")
 		return
 	}
 
@@ -90,7 +89,7 @@ func (ns *NetworkService) onAccept(self actor.Context, message interface{}) {
 	if err != nil {
 		//close-socket
 		network.OperClose(accepter.Handle)
-		logger.Trace(self.Self().GetID(), "accept player closed: %v, %d-%s:%d", err,
+		logger.Trace(self.Self().GetID(), "accept client closed: %v, %d-%s:%d", err,
 			accepter.Handle,
 			accepter.Addr.String(),
 			accepter.Port)
@@ -98,21 +97,23 @@ func (ns *NetworkService) onAccept(self actor.Context, message interface{}) {
 	}
 
 	network.OperOpen(accepter.Handle)
+	network.OperSetKeep(accepter.Handle, uint64(constant.GatewayConnectKleep))
 	//------------------------------------------------
 	//First handshake and agree on the key
 	shake, _ := proto.Marshal(&pkg.HandshakeResponse{Key: ""})
 	shake = agreement.ExtAssemble(1, "proto.HandshakeResponse", shake, int32(len(shake)))
 	network.OperWrite(accepter.Handle, shake, len(shake))
+
 	//-------------------------------------------------
 	client.Stat.UpdateOnline(timer.Now())
 	elements.Clients.Release(client)
-	logger.Trace(self.Self().GetID(), "accept player %d-%s:%d\n", accepter.Handle, accepter.Addr.String(), accepter.Port)
+	logger.Debug(self.Self().GetID(), "accept client %d-%s:%d", accepter.Handle, accepter.Addr.String(), accepter.Port)
 }
 
 func (ns *NetworkService) onRecv(self actor.Context, message interface{}) {
-	data := message.(network.NetChunk)
-	hid := elements.Clients.ToHandleID(data.Handle)
-	if hid == 0 {
+	data := message.(*network.NetChunk)
+	hid, herr := elements.Clients.ToHandleID(data.Handle)
+	if herr != nil {
 		logger.Trace(self.Self().GetID(), "recv error closed unfind map-id socket %d", data.Handle)
 		network.OperClose(data.Handle)
 		return
@@ -158,7 +159,7 @@ func (ns *NetworkService) onRecv(self actor.Context, message interface{}) {
 			}
 
 			pos += space
-			wby += space
+			writed += space
 
 			client.Stat.UpdateRecv(timer.Now(), uint64(space))
 		}
@@ -182,19 +183,23 @@ func (ns *NetworkService) onRecv(self actor.Context, message interface{}) {
 				continue
 			}
 
-			if wby == 0 {
+			if writed >= len(data.Data) {
 				goto releaseclient
+			} else {
+				break
 			}
 		}
 	}
 releaseclient:
 	elements.Clients.Release(client)
+	logger.Debug(self.Self().GetID(), "Exit onRecv")
 }
 
 func (ns *NetworkService) onClose(self actor.Context, message interface{}) {
-	closer := message.(network.NetClose)
-	hid := elements.Clients.ToHandleID(closer.Handle)
-	if hid == 0 {
+	closer := message.(*network.NetClose)
+	logger.Debug(self.Self().GetID(), "关闭")
+	hid, herr := elements.Clients.ToHandleID(closer.Handle)
+	if herr != nil {
 		logger.Trace(self.Self().GetID(), "close unfind map-id socket %d", closer.Handle)
 		return
 	}
@@ -204,7 +209,7 @@ func (ns *NetworkService) onClose(self actor.Context, message interface{}) {
 
 	client := elements.Clients.Grap(&closeHandle)
 	if client == nil {
-		logger.Trace(self.Self().GetID(), "close unfind player %d-%d-%d-%d",
+		logger.Trace(self.Self().GetID(), "close unfind client %d-%d-%d-%d",
 			closeHandle.GatewayID(),
 			closeHandle.WorldID(),
 			closeHandle.HandleID(),
@@ -215,12 +220,17 @@ func (ns *NetworkService) onClose(self actor.Context, message interface{}) {
 	closeHandle = client.Handle
 	elements.Clients.Erase(&closeHandle)
 	elements.Clients.Release(client)
+
+	logger.Debug(self.Self().GetID(), "closed client %d-%d-%d-%d", closeHandle.GatewayID(),
+																closeHandle.WorldID(),
+																closeHandle.HandleID(),
+																closeHandle.SocketID())
 unline:
 	ns.pushOffline(&closeHandle)
 }
 
 func (ns *NetworkService) onConfirm(self actor.Context, message interface{}) {
-	confirm := message.(agreement.CertificationConfirmation)
+	confirm := message.(*agreement.CertificationConfirmation)
 	confirmHandle := util.NetHandle{}
 	confirmHandle.SetValue(confirm.Handle)
 	client := elements.Clients.Grap(&confirmHandle)
@@ -258,11 +268,14 @@ func (ns *NetworkService) onRoute(client *clients.Client, name string, data []by
 	}
 
 	//
+	
 	actor.DefaultSchedulerContext.Send(&constant.ConnectServicePID,
 		&agreement.ForwardMessage{Handle: client.Handle.GetValue(),
 			AgreementName: name,
 			ServerName:    adr.ServiceName,
 			Data:          data})
+
+	logger.Debug(ns.ID(), "forward message agreement name:%s server name:%d data length:%d", name, adr.ServiceName, len(data))
 
 	return nil
 }

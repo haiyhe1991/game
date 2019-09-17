@@ -45,6 +45,7 @@ func (gw *GatewayFrame) InitService() error {
 	constant.GatewayAddr = util.GetEnvString(gatewayEnv, "addr", "0.0.0.0:7850")
 	constant.GatewayMaxConnect = util.GetEnvInt(gatewayEnv, "max", 1024)
 	constant.GatewayCCMax = util.GetEnvInt(gatewayEnv, "chan-max", 32)
+	constant.GatewayConnectKleep = util.GetEnvInt(gatewayEnv, "connection-kleep", 1000*30)
 	constant.GatewayLuaScriptPath = util.GetEnvString(gatewayEnv, "lua-script-path", "./script")
 	constant.GatewayLuaScriptFile = util.GetEnvString(gatewayEnv, "lua-script-file", "./script/gateway.lua")
 

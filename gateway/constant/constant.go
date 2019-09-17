@@ -34,6 +34,8 @@ var (
 	GatewayAddr string
 	//GatewayCCMax Gateway connects to the client pipe maximum buffer, the default is 32
 	GatewayCCMax int
+	//GatewayConnectKleep Gateway connection heartbeat event setting, in milliseconds
+	GatewayConnectKleep int
 	//GatewayLuaScriptPath Gateway script search path
 	GatewayLuaScriptPath string
 	//GatewayLuaScriptFile Gateway default script name

@@ -2,6 +2,7 @@ package clients
 
 import (
 	"bytes"
+	"errors"
 	"net"
 	"sync"
 
@@ -30,15 +31,15 @@ type ClientManager struct {
 	mps   map[int32]uint16
 	sz    int
 	seqID uint16
-	sync  sync.Mutex
+	sync.Mutex
 }
 
 // Initial Initialize Player management module
 func (cms *ClientManager) Initial(id int32) {
-
 	cms.d = id
 	cms.s = make([]*Client, constant.ConstPlayerMax)
 	cms.mps = make(map[int32]uint16, 64)
+	cms.seqID = 1
 }
 
 // Occupy Assign and jion plays a player object
@@ -48,7 +49,8 @@ func (cms *ClientManager) Occupy(sock int32, addr net.IP, port int) (*Client, ut
 	client.port = port
 
 	var i uint16
-	cms.sync.Lock()
+	cms.Lock()
+
 	for i = 0; i < constant.ConstPlayerMax; i++ {
 		key := ((i + cms.seqID) & constant.ConstPlayerIDMask)
 		hash := key & (constant.ConstPlayerMax - 1)
@@ -61,12 +63,11 @@ func (cms *ClientManager) Occupy(sock int32, addr net.IP, port int) (*Client, ut
 			cms.s[hash].ref = 2
 			cms.mps[sock] = key
 			cms.sz++
-			cms.sync.Unlock()
+			cms.Unlock()
 			return client, handle, nil
 		}
 	}
-
-	cms.sync.Unlock()
+	cms.Unlock()
 	clientPool.Put(client)
 
 	return nil, util.NetHandle{}, errPlayerFull
@@ -74,21 +75,21 @@ func (cms *ClientManager) Occupy(sock int32, addr net.IP, port int) (*Client, ut
 
 // Grap Pick up a player object and take it
 func (cms *ClientManager) Grap(h *util.NetHandle) *Client {
-	cms.sync.Lock()
+	cms.Lock()
+	defer cms.Unlock()
 	hash := uint32(h.HandleID()) & uint32(constant.ConstPlayerMax-1)
 	if cms.s[hash] != nil && cms.s[hash].Handle.HandleID() == h.HandleID() {
 		pe := cms.s[hash]
 		pe.ref++
-		cms.sync.Unlock()
 		return pe
 	}
-	cms.sync.Unlock()
 	return nil
 }
 
 // Erase removes the Player from PlayManager
 func (cms *ClientManager) Erase(h *util.NetHandle) {
-	cms.sync.Lock()
+	cms.Lock()
+	defer cms.Unlock()
 	hash := uint32(h.HandleID()) & uint32(constant.ConstPlayerMax-1)
 	if cms.s[hash] != nil && cms.s[hash].Handle.HandleID() == h.HandleID() {
 		pe := cms.s[hash]
@@ -103,28 +104,26 @@ func (cms *ClientManager) Erase(h *util.NetHandle) {
 		}
 
 	}
-	cms.sync.Unlock()
 }
 
 // Release  Release control
 func (cms *ClientManager) Release(client *Client) {
-	cms.sync.Lock()
+	cms.Lock()
+	defer cms.Unlock()
 	client.ref--
 	if client.ref <= 0 {
 		clientPool.Put(client)
 	}
-	cms.sync.Unlock()
 }
 
 // ToHandleID Socket conversion to the corresponding handle id
-func (cms *ClientManager) ToHandleID(sock int32) uint16 {
-	cms.sync.Lock()
+func (cms *ClientManager) ToHandleID(sock int32) (uint16, error) {
+	cms.Lock()
+	defer cms.Unlock()
 	if v, ok := cms.mps[sock]; ok {
-		cms.sync.Unlock()
-		return v
+		return v, nil
 	}
-	cms.sync.Unlock()
-	return 0
+	return 0, errors.New("unknown id")
 }
 
 // Size the PlayManager of number
@@ -134,8 +133,8 @@ func (cms *ClientManager) Size() int {
 
 // GetHandls Get all the player object handles
 func (cms *ClientManager) GetHandls() []util.NetHandle {
-
-	cms.sync.Lock()
+	cms.Lock()
+	defer cms.Unlock()
 	i := 0
 	hs := make([]util.NetHandle, cms.sz)
 	for _, client := range cms.s {
@@ -146,6 +145,6 @@ func (cms *ClientManager) GetHandls() []util.NetHandle {
 		hs[i] = client.Handle
 		i++
 	}
-	cms.sync.Unlock()
+
 	return hs
 }
