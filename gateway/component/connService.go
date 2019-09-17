@@ -16,9 +16,9 @@ import (
 	"github.com/yamakiller/game/gateway/elements/servers"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/engine/logger"
-	"github.com/yamakiller/magicNet/engine/util"
 	"github.com/yamakiller/magicNet/network"
 	"github.com/yamakiller/magicNet/service"
+	"github.com/yamakiller/magicNet/util"
 )
 
 //NewConnService Create a connection service

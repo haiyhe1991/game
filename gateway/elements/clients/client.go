@@ -6,7 +6,7 @@ import (
 	"net"
 
 	"github.com/yamakiller/game/common/agreement"
-	"github.com/yamakiller/magicNet/engine/util"
+	"github.com/yamakiller/magicNet/util"
 )
 
 var (

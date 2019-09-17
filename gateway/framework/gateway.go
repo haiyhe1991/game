@@ -7,7 +7,7 @@ import (
 	"github.com/yamakiller/game/gateway/constant"
 
 	"github.com/yamakiller/magicNet/core"
-	"github.com/yamakiller/magicNet/engine/util"
+	"github.com/yamakiller/magicNet/util"
 )
 
 // GatewayFrame Gateway main frame

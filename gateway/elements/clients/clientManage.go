@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/yamakiller/game/gateway/constant"
-	"github.com/yamakiller/magicNet/engine/util"
+	"github.com/yamakiller/magicNet/util"
 )
 
 var clientPool = sync.Pool{

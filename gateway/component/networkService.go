@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/yamakiller/magicNet/timer"
+	"github.com/yamakiller/magicNet/util"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/game/common/agreement"
@@ -14,7 +15,6 @@ import (
 	pkg "github.com/yamakiller/game/proto"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/engine/logger"
-	"github.com/yamakiller/magicNet/engine/util"
 	"github.com/yamakiller/magicNet/network"
 	"github.com/yamakiller/magicNet/service"
 )
