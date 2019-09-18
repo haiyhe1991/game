@@ -1,7 +1,7 @@
 package elements
 
 import (
-	"github.com/yamakiller/game/common/agreement"
+	"github.com/yamakiller/game/common/agreement/preset"
 	"github.com/yamakiller/game/gateway/constant"
 	"github.com/yamakiller/game/gateway/elements/clients"
 	"github.com/yamakiller/game/gateway/elements/route"
@@ -22,5 +22,5 @@ func init() {
 	Clients = &clients.ClientManager{}
 	Conns = servers.NewManager()
 
-	agreement.SetSingleLimit(constant.ConstPlayerBufferLimit >> 1)
+	preset.SetSingleLimit(constant.ConstPlayerBufferLimit >> 1)
 }

@@ -21,18 +21,18 @@ import (
 	"github.com/yamakiller/magicNet/util"
 )
 
-//NewConnService Create a connection service
-func NewConnService() *ConnectService {
+//NewTCPConService Create a connection service
+func NewTCPConService() *ConService {
 	return service.Make(constant.ConstConnectServiceName, func() service.IService {
-		handle := &ConnectService{}
+		handle := &ConService{}
 
 		handle.Init()
 		return handle
-	}).(*ConnectService)
+	}).(*ConService)
 }
 
-//ConnectService Provide connection service
-type ConnectService struct {
+//ConService Provide connection service
+type ConService struct {
 	service.Service
 	stopTicker     chan bool
 	workTicker     sync.WaitGroup
@@ -41,7 +41,7 @@ type ConnectService struct {
 }
 
 //Init Initialize connection service
-func (cse *ConnectService) Init() {
+func (cse *ConService) Init() {
 	cse.isShutdown = true
 	cse.autoConnecting = false
 	cse.Service.Init()
@@ -54,7 +54,7 @@ func (cse *ConnectService) Init() {
 }
 
 //Started Start connecting service
-func (cse *ConnectService) Started(context actor.Context, message interface{}) {
+func (cse *ConService) Started(context actor.Context, message interface{}) {
 	logger.Info(context.Self().GetID(), "Network Connect [TCP/IP] Service Startup")
 	constant.ConnectServicePID = *context.Self()
 	cse.workTicker.Add(1)
@@ -83,7 +83,7 @@ func (cse *ConnectService) Started(context actor.Context, message interface{}) {
 }
 
 //Stoped Start connecting service
-func (cse *ConnectService) Stoped(context actor.Context, message interface{}) {
+func (cse *ConService) Stoped(context actor.Context, message interface{}) {
 	cse.isShutdown = true
 	cse.stopTicker <- true
 	cse.workTicker.Wait()
@@ -91,12 +91,12 @@ func (cse *ConnectService) Stoped(context actor.Context, message interface{}) {
 }
 
 // Shutdown TCP network connection service termination
-func (cse *ConnectService) Shutdown() {
+func (cse *ConService) Shutdown() {
 	cse.Service.Shutdown()
 }
 
 //onForward Push data to target service
-func (cse *ConnectService) onForwardService(context actor.Context, message interface{}) {
+func (cse *ConService) onForwardService(context actor.Context, message interface{}) {
 
 	msg := message.(*agreement.ForwardMessage)
 	grp := elements.Conns.GetGroup(msg.ServerName)
@@ -104,7 +104,6 @@ func (cse *ConnectService) onForwardService(context actor.Context, message inter
 		logger.Error(context.Self().GetID(), "Forward message error No corresponding service connection found")
 		return
 	}
-
 
 	handle := util.NetHandle{}
 	handle.SetValue(msg.Handle)
@@ -116,18 +115,16 @@ func (cse *ConnectService) onForwardService(context actor.Context, message inter
 		return
 	}
 
-
 	var (
 		sock int32
 		err  error
 	)
 
-	forwardData := agreement.InsideAssemble(1, handle.GetValue(), msg.AgreementName, msg.Data, int32(len(msg.Data)))
+	forwardData := agreement.AgentParser(0).Assemble(1, handle.GetValue(), msg.AgreementName, msg.Data, int32(len(msg.Data)))
 	if forwardData == nil {
 		logger.Error(context.Self().GetID(), "Forward message error Failed to assemble internal data packets")
 		return
 	}
-
 
 	ick := 0
 	for {
@@ -160,7 +157,7 @@ func (cse *ConnectService) onForwardService(context actor.Context, message inter
 }
 
 //onCheckConnect Detect all connection status and automatically connect to the service
-func (cse *ConnectService) onCheckConnect(context actor.Context, message interface{}) {
+func (cse *ConService) onCheckConnect(context actor.Context, message interface{}) {
 	cse.autoConnecting = true
 	cse.workTicker.Add(1)
 	defer cse.workTicker.Done()
@@ -172,7 +169,7 @@ func (cse *ConnectService) onCheckConnect(context actor.Context, message interfa
 	elements.Conns.CheckConnect(context)
 }
 
-func (cse *ConnectService) onRecv(self actor.Context, message interface{}) {
+func (cse *ConService) onRecv(self actor.Context, message interface{}) {
 	data := message.(*network.NetChunk)
 	csrv := elements.Conns.GetHandle(data.Handle)
 	if csrv == nil {
@@ -232,7 +229,7 @@ func (cse *ConnectService) onRecv(self actor.Context, message interface{}) {
 releaseconnect:
 }
 
-func (cse *ConnectService) onClose(context actor.Context, message interface{}) {
+func (cse *ConService) onClose(context actor.Context, message interface{}) {
 	closer := message.(network.NetClose)
 	conn := elements.Conns.GetHandle(closer.Handle)
 	if conn == nil {
@@ -244,7 +241,7 @@ func (cse *ConnectService) onClose(context actor.Context, message interface{}) {
 	conn.ClearData()
 }
 
-func (cse *ConnectService) onForwardClient(context actor.Context, handle uint64, agreementName string, data []byte) {
+func (cse *ConService) onForwardClient(context actor.Context, handle uint64, agreementName string, data []byte) {
 	h := util.NetHandle{}
 	h.SetValue(handle)
 
@@ -282,7 +279,7 @@ func (cse *ConnectService) onForwardClient(context actor.Context, handle uint64,
 		return
 	}
 
-	forwardData := agreement.ExtAssemble(1, agreementName, data, int32(len(data)))
+	forwardData := agreement.AgentParser(agreement.ConstExParser).Assemble(1, 0, agreementName, data, int32(len(data)))
 	if forwardData == nil {
 		logger.Error(context.Self().GetID(), "Forward data error %s protocol data packaging failed", agreementName)
 		return
@@ -310,6 +307,6 @@ func (cse *ConnectService) onForwardClient(context actor.Context, handle uint64,
 		&agreement.CertificationConfirmation{Handle: h.GetValue()})
 }
 
-func (cse *ConnectService) restAutoConnection() {
+func (cse *ConService) restAutoConnection() {
 	cse.autoConnecting = false
 }

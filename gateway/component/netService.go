@@ -2,6 +2,7 @@ package component
 
 import (
 	"time"
+
 	"github.com/yamakiller/magicNet/timer"
 	"github.com/yamakiller/magicNet/util"
 
@@ -16,13 +17,14 @@ import (
 	"github.com/yamakiller/magicNet/engine/logger"
 	"github.com/yamakiller/magicNet/network"
 	"github.com/yamakiller/magicNet/service"
+	net "github.com/yamakiller/magicNet/service/net"
 )
 
-// NewTCPNetworkService Create a tcp network service
-func NewTCPNetworkService() *NetworkService {
+// NewTCPNetService Create a tcp network service
+func NewTCPNetService() *NetService {
 	return service.Make(constant.ConstNetworkServiceName, func() service.IService {
 
-		handle := &NetworkService{TCPService: service.TCPService{
+		handle := &NetService{TCPService: net.TCPService{
 			Addr:  constant.GatewayAddr,
 			CCMax: constant.GatewayCCMax},
 		}
@@ -33,23 +35,23 @@ func NewTCPNetworkService() *NetworkService {
 
 		handle.Init()
 		return handle
-	}).(*NetworkService)
+	}).(*NetService)
 }
 
-// NetworkService Components that provide network services
-type NetworkService struct {
-	service.TCPService
+// NetService Components that provide network services
+type NetService struct {
+	net.TCPService
 }
 
 //Init Initialize the network service object
-func (ns *NetworkService) Init() {
+func (ns *NetService) Init() {
 	elements.Clients.Initial(constant.GatewayID)
 	ns.TCPService.Init()
 	ns.RegisterMethod(agreement.CertificationConfirmation{}, ns.onConfirm)
 }
 
 //Shutdown Termination of network services
-func (ns *NetworkService) Shutdown() {
+func (ns *NetService) Shutdown() {
 	logger.Info(ns.ID(), "Network Listen [TCP/IP] Service Closing connection")
 	hs := elements.Clients.GetHandls()
 	for elements.Clients.Size() > 0 {
@@ -77,7 +79,7 @@ func (ns *NetworkService) Shutdown() {
 	ns.TCPService.Shutdown()
 }
 
-func (ns *NetworkService) onAccept(self actor.Context, message interface{}) {
+func (ns *NetService) onAccept(self actor.Context, message interface{}) {
 	accepter := message.(*network.NetAccept)
 	if elements.Clients.Size()+1 > constant.GatewayMaxConnect {
 		network.OperClose(accepter.Handle)
@@ -101,7 +103,7 @@ func (ns *NetworkService) onAccept(self actor.Context, message interface{}) {
 	//------------------------------------------------
 	//First handshake and agree on the key
 	shake, _ := proto.Marshal(&pkg.HandshakeResponse{Key: ""})
-	shake = agreement.ExtAssemble(1, "proto.HandshakeResponse", shake, int32(len(shake)))
+	shake = agreement.AgentParser(agreement.ConstExParser).Assemble(1, 0, "proto.HandshakeResponse", shake, int32(len(shake)))
 	network.OperWrite(accepter.Handle, shake, len(shake))
 
 	//-------------------------------------------------
@@ -110,7 +112,7 @@ func (ns *NetworkService) onAccept(self actor.Context, message interface{}) {
 	logger.Debug(self.Self().GetID(), "accept client %d-%s:%d", accepter.Handle, accepter.Addr.String(), accepter.Port)
 }
 
-func (ns *NetworkService) onRecv(self actor.Context, message interface{}) {
+func (ns *NetService) onRecv(self actor.Context, message interface{}) {
 	data := message.(*network.NetChunk)
 	hid, herr := elements.Clients.ToHandleID(data.Handle)
 	if herr != nil {
@@ -195,7 +197,7 @@ releaseclient:
 	logger.Debug(self.Self().GetID(), "Exit onRecv")
 }
 
-func (ns *NetworkService) onClose(self actor.Context, message interface{}) {
+func (ns *NetService) onClose(self actor.Context, message interface{}) {
 	closer := message.(*network.NetClose)
 	logger.Debug(self.Self().GetID(), "关闭")
 	hid, herr := elements.Clients.ToHandleID(closer.Handle)
@@ -222,14 +224,14 @@ func (ns *NetworkService) onClose(self actor.Context, message interface{}) {
 	elements.Clients.Release(client)
 
 	logger.Debug(self.Self().GetID(), "closed client %d-%d-%d-%d", closeHandle.GatewayID(),
-																closeHandle.WorldID(),
-																closeHandle.HandleID(),
-																closeHandle.SocketID())
+		closeHandle.WorldID(),
+		closeHandle.HandleID(),
+		closeHandle.SocketID())
 unline:
 	ns.pushOffline(&closeHandle)
 }
 
-func (ns *NetworkService) onConfirm(self actor.Context, message interface{}) {
+func (ns *NetService) onConfirm(self actor.Context, message interface{}) {
 	confirm := message.(*agreement.CertificationConfirmation)
 	confirmHandle := util.NetHandle{}
 	confirmHandle.SetValue(confirm.Handle)
@@ -244,7 +246,7 @@ func (ns *NetworkService) onConfirm(self actor.Context, message interface{}) {
 	logger.Debug(self.Self().GetID(), "Connection authentication succeeded %+v", confirmHandle.HandleID)
 }
 
-func (ns *NetworkService) onRoute(client *clients.Client, name string, data []byte) error {
+func (ns *NetService) onRoute(client *clients.Client, name string, data []byte) error {
 	msgType := proto.MessageType(name)
 	if msgType == nil {
 		logger.Error(ns.ID(), "route error %s", route.ErrRouteAgreeUnDefined.Error())
@@ -268,7 +270,7 @@ func (ns *NetworkService) onRoute(client *clients.Client, name string, data []by
 	}
 
 	//
-	
+
 	actor.DefaultSchedulerContext.Send(&constant.ConnectServicePID,
 		&agreement.ForwardMessage{Handle: client.Handle.GetValue(),
 			AgreementName: name,
@@ -280,6 +282,6 @@ func (ns *NetworkService) onRoute(client *clients.Client, name string, data []by
 	return nil
 }
 
-func (ns *NetworkService) pushOffline(h *util.NetHandle) {
+func (ns *NetService) pushOffline(h *util.NetHandle) {
 
 }

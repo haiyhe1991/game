@@ -25,8 +25,8 @@ type GatewayFrame struct {
 
 	//
 	luaService *component.ScriptService
-	conService *component.ConnectService
-	netService *component.NetworkService
+	conService *component.ConService
+	netService *component.NetService
 }
 
 //InitService init gateway system
@@ -52,8 +52,8 @@ func (gw *GatewayFrame) InitService() error {
 	gw.luaService = &component.ScriptService{}
 	gw.luaService.Init()
 
-	gw.conService = component.NewConnService()
-	gw.netService = component.NewTCPNetworkService()
+	gw.conService = component.NewTCPConService()
+	gw.netService = component.NewTCPNetService()
 
 	return nil
 }

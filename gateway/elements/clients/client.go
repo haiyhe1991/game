@@ -62,5 +62,6 @@ func (ct *Client) DataWrite(p []byte) (int, error) {
 
 //DataAnalysis Play protocol data analysis
 func (ct *Client) DataAnalysis() (string, []byte, error) {
-	return agreement.ExtAnalysis(ct.data)
+	name, _, data, err := agreement.AgentParser(agreement.ConstExParser).Analysis(ct.data)
+	return name, data, err
 }

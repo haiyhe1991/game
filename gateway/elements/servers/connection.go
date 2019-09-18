@@ -29,7 +29,7 @@ type Connection struct {
 
 //DataAnalysis Analytic data protocol
 func (cn *Connection) DataAnalysis() (string, uint64, []byte, error) {
-	return agreement.InsideAnalysis(cn.data)
+	return agreement.AgentParser(agreement.ConstInParser).Analysis(cn.data)
 }
 
 //DataWrite Write data to buffer
