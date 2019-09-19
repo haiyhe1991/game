@@ -5,8 +5,59 @@ import (
 	"net"
 )
 
-// VisitorStat xxx
+//VisitorKeyPair Visitor the key pair
+type VisitorKeyPair struct {
+}
+
+// VisitorStat Visitor status data
 type VisitorStat struct {
+	online        uint64
+	lastRecvTime  uint64
+	lastWriteTime uint64
+	recvCount     uint64
+	writeCount    uint64
+}
+
+// UpdateWrite Update write status data
+func (stat *VisitorStat) UpdateWrite(tts uint64, bytes uint64) {
+	stat.lastWriteTime = tts
+	stat.writeCount += bytes
+}
+
+// UpdateRecv Update read status data
+func (stat *VisitorStat) UpdateRecv(tts uint64, bytes uint64) {
+	stat.lastRecvTime = tts
+	stat.recvCount += bytes
+}
+
+// UpdateOnline Update time online
+func (stat *VisitorStat) UpdateOnline(tts uint64) {
+	stat.online = tts
+}
+
+//IVisitor Visitor interface
+type IVisitor interface {
+	GetAuth() uint64
+	SetAuth(v uint64)
+	GetKey() int32
+	SetKey(v int32)
+	GetSocket() int32
+	SetSocket(v int32)
+	GetAddr() net.IP
+	SetAddr(v net.IP)
+	GetPort() int
+	SetPort(v int)
+	GetData() *bytes.Buffer
+	SetData(v *bytes.Buffer)
+	GetKeyPair() *VisitorKeyPair
+	GetStat() *VisitorStat
+	RestRef()
+	IncRef()
+	DecRef() int
+}
+
+// VisitorStat xxx
+/*type VisitorStat struct {
 	online        uint64
 	lastRecvTime  uint64
 	lastWriteTime uint64
@@ -71,4 +122,4 @@ func (v *Visitor) SetData(d *bytes.Buffer) {
 //RefRest xxxx
 func (v *Visitor) RefRest() {
 	v.ref = 0
-}
+}*/

@@ -1,6 +1,9 @@
 package servers
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/yamakiller/game/gateway/constant"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/engine/logger"
@@ -32,6 +35,17 @@ func (cmsr *ConnectionManager) GetGroup(srvName string) *ConnectionGroup {
 	return &cgp
 }
 
+//GetGroupNames returns the names of all servers
+func (cmsr *ConnectionManager) GetGroupNames() []string {
+	i := 0
+	result := make([]string, len(cmsr.serverGroup))
+	for name, _ := range cmsr.serverGroup {
+		result[i] = name
+		i++
+	}
+	return result
+}
+
 //GetHandle Get the connection object
 func (cmsr *ConnectionManager) GetHandle(sock int32) *Connection {
 	var conn *Connection
@@ -49,12 +63,12 @@ func (cmsr *ConnectionManager) GetHandle(sock int32) *Connection {
 func (cmsr *ConnectionManager) CheckConnect(context actor.Context) {
 	f := func(v interface{}) {
 		c := v.(*Connection)
-		if c.ID == 0 || c.Sock > 0 {
+		if c.GetID() == 0 || c.GetSocket() > 0 {
 			return
 		}
 		err := AutoConnect(context, c)
 		if err != nil {
-			logger.Error(context.Self().GetID(), "Connection service failed %s %d-%s", err, c.ID, c.Addr)
+			logger.Error(context.Self().GetID(), "Connection service failed %s %d-%s", err, c.GetID(), c.GetAddr())
 		}
 	}
 
@@ -66,13 +80,28 @@ func (cmsr *ConnectionManager) CheckConnect(context actor.Context) {
 //AutoConnect Auto connection service
 func AutoConnect(context actor.Context, c *Connection) error {
 
-	h, err := network.OperTCPConnect(context.Self(), c.Addr, constant.ConstConnectChanMax)
+	h, err := network.OperTCPConnect(context.Self(), c.GetAddr(), constant.ConstConnectChanMax)
 	if err != nil {
 		return err
 	}
 
-	c.Sock = h
+	c.SetSocket(h)
 	network.OperOpen(h)
+
+	ick := 0
+	for {
+		if c.auth > 0 {
+			break
+		}
+
+		ick++
+		if ick > 100 {
+			network.OperClose(h)
+			return fmt.Errorf("Automatic reconnection timeout does not wait for handshake data:%d", h)
+		}
+
+		time.Sleep(time.Millisecond * time.Duration(50))
+	}
 
 	return nil
 }

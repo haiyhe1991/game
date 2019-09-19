@@ -14,21 +14,19 @@ type ConnectionGroup struct {
 //Register Register a Service Connection Object
 func (cgs *ConnectionGroup) Register(name string, id int32, addr string) {
 	key := name + strconv.Itoa(int(id))
-	c, err := cgs.g.Get(key)
-	if err != nil {
-		c.(*Connection).Addr = addr
-		return
-	}
+	c := &Connection{}
 
+	c.SetID(id)
+	c.SetAddr(addr)
 
-	cgs.g.Push(key, &Connection{ID: id, Addr: addr})
+	cgs.g.Push(key, c)
 }
 
 //FindSocket Find connection service based on SOCKET
 func (cgs *ConnectionGroup) FindSocket(sock int32) *Connection {
 
 	f := func(key interface{}, val interface{}) int {
-		if val.(*Connection).Sock == val.(int32) {
+		if val.(*Connection).GetSocket() == val.(int32) {
 			return 0
 		}
 		return -1

@@ -26,7 +26,7 @@ type GatewayFrame struct {
 	//
 	luaService *component.ScriptService
 	conService *component.ConService
-	netService *component.NetService
+	netService *component.OutNetService
 }
 
 //InitService init gateway system

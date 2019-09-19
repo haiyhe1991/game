@@ -1,6 +1,7 @@
 package component
 
 import (
+	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -37,6 +38,7 @@ type ConService struct {
 	stopTicker     chan bool
 	workTicker     sync.WaitGroup
 	autoConnecting bool
+	handshake      interface{}
 	isShutdown     bool
 }
 
@@ -51,6 +53,7 @@ func (cse *ConService) Init() {
 	cse.RegisterMethod(&network.NetClose{}, cse.onClose)
 	cse.RegisterMethod(&agreement.ForwardMessage{}, cse.onForwardService)
 	cse.RegisterMethod(&agreement.CheckConnectMessage{}, cse.onCheckConnect)
+	cse.handshake = reflect.TypeOf(&pkg.HandshakeResponse{})
 }
 
 //Started Start connecting service
@@ -128,21 +131,22 @@ func (cse *ConService) onForwardService(context actor.Context, message interface
 
 	ick := 0
 	for {
-		if conn.Sock == 0 {
+		if conn.GetSocket() == 0 {
 			//Auto Connect
 			err := servers.AutoConnect(context, conn)
 
 			if err != nil {
+				logger.Error(context.Self().GetID(), "Automatic reconnection failed:%s,[%s]", err.Error(), msg.ServerName)
 				goto loop_slp
 			}
 		}
-		sock = conn.Sock
+		sock = conn.GetSocket()
 
 		err = network.OperWrite(sock, forwardData, len(forwardData))
 		if err != nil {
 			logger.Error(context.Self().GetID(),
 				"Forward message error write fail %s %d-%s[%s]",
-				err.Error(), conn.ID, msg.ServerName, msg.AgreementName)
+				err.Error(), conn.GetID(), msg.ServerName, msg.AgreementName)
 		}
 
 		break
@@ -190,14 +194,14 @@ func (cse *ConService) onRecv(self actor.Context, message interface{}) {
 	)
 
 	for {
-		space = constant.ConstPlayerBufferLimit - csrv.DataLen()
+		space = constant.ConstPlayerBufferLimit - csrv.GetData().Len()
 		wby = len(data.Data) - writed
 		if space > 0 && wby > 0 {
 			if space > wby {
 				space = wby
 			}
 
-			_, err := csrv.DataWrite(data.Data[pos : pos+space])
+			_, err := csrv.GetData().Write(data.Data[pos : pos+space])
 			if err != nil {
 				logger.Trace(self.Self().GetID(), "recv error %s socket %d", err.Error(), data.Handle)
 				network.OperClose(data.Handle)
@@ -209,7 +213,7 @@ func (cse *ConService) onRecv(self actor.Context, message interface{}) {
 		}
 
 		for {
-			pkName, pkHandle, pkData, pkErro = csrv.DataAnalysis()
+			pkName, pkHandle, pkData, pkErro = csrv.Analysis()
 			if pkErro != nil {
 				logger.Error(self.Self().GetID(), "recv error %s socket %d closing play", pkErro.Error(), data.Handle)
 				network.OperClose(data.Handle)
@@ -217,6 +221,13 @@ func (cse *ConService) onRecv(self actor.Context, message interface{}) {
 			}
 
 			if pkData != nil {
+				//Determine whether it is handshake data
+				msgType := proto.MessageType(pkName)
+				if msgType != nil && msgType == cse.handshake {
+					csrv.SetAuth(timer.Now())
+					continue
+				}
+				//Not a handshake agreement
 				cse.onForwardClient(self, pkHandle, pkName, pkData)
 				continue
 			}
@@ -237,8 +248,9 @@ func (cse *ConService) onClose(context actor.Context, message interface{}) {
 		return
 	}
 
-	conn.Sock = 0
-	conn.ClearData()
+	conn.SetSocket(0)
+	conn.SetAuth(0)
+	conn.Clear()
 }
 
 func (cse *ConService) onForwardClient(context actor.Context, handle uint64, agreementName string, data []byte) {
@@ -258,19 +270,19 @@ func (cse *ConService) onForwardClient(context actor.Context, handle uint64, agr
 	}
 	//======================================================================================================================================
 	if re.Auth {
-		client := elements.Clients.Grap(&h)
+		client := elements.Clients.Grap(h.HandleID())
 		if client == nil {
 			logger.Error(context.Self().GetID(), "Forward data error %s Target player does not exist", agreementName)
 			return
 		}
 
-		if client.Auth == 0 {
+		if client.GetAuth() == 0 {
 			logger.Error(context.Self().GetID(), "Forward data error %s Target player need to login authentication", agreementName)
 			elements.Clients.Release(client)
 			return
 		}
 
-		client.Stat.UpdateWrite(timer.Now(), uint64(len(data)))
+		client.GetStat().UpdateWrite(timer.Now(), uint64(len(data)))
 		elements.Clients.Release(client)
 	}
 	//=======================================================================================================================================

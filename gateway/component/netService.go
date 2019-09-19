@@ -1,13 +1,12 @@
 package component
 
 import (
-	"time"
-
 	"github.com/yamakiller/magicNet/timer"
 	"github.com/yamakiller/magicNet/util"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/game/common/agreement"
+	cmcm "github.com/yamakiller/game/common/component"
 	"github.com/yamakiller/game/gateway/constant"
 	"github.com/yamakiller/game/gateway/elements"
 	"github.com/yamakiller/game/gateway/elements/clients"
@@ -17,16 +16,14 @@ import (
 	"github.com/yamakiller/magicNet/engine/logger"
 	"github.com/yamakiller/magicNet/network"
 	"github.com/yamakiller/magicNet/service"
-	net "github.com/yamakiller/magicNet/service/net"
 )
 
 // NewTCPNetService Create a tcp network service
-func NewTCPNetService() *NetService {
+func NewTCPNetService() *OutNetService {
 	return service.Make(constant.ConstNetworkServiceName, func() service.IService {
 
-		handle := &NetService{TCPService: net.TCPService{
-			Addr:  constant.GatewayAddr,
-			CCMax: constant.GatewayCCMax},
+		handle := &OutNetService{
+			NetService: *cmcm.NewTCPService(constant.GatewayAddr, constant.GatewayCCMax, elements.Clients),
 		}
 
 		handle.OnAccept = handle.onAccept
@@ -35,59 +32,34 @@ func NewTCPNetService() *NetService {
 
 		handle.Init()
 		return handle
-	}).(*NetService)
+	}).(*OutNetService)
 }
 
-// NetService Components that provide network services
-type NetService struct {
-	net.TCPService
+var (
+	localTargetServiceNames []string = nil
+)
+
+// OutNetService Components that provide network services
+type OutNetService struct {
+	cmcm.NetService
 }
 
 //Init Initialize the network service object
-func (ns *NetService) Init() {
-	elements.Clients.Initial(constant.GatewayID)
+func (ns *OutNetService) Init() {
+	ns.CS.(*clients.ClientManager).Spawned()
 	ns.TCPService.Init()
 	ns.RegisterMethod(agreement.CertificationConfirmation{}, ns.onConfirm)
 }
 
-//Shutdown Termination of network services
-func (ns *NetService) Shutdown() {
-	logger.Info(ns.ID(), "Network Listen [TCP/IP] Service Closing connection")
-	hs := elements.Clients.GetHandls()
-	for elements.Clients.Size() > 0 {
-		chk := 0
-		for i := 0; i < len(hs); i++ {
-			network.OperClose(hs[i].SocketID())
-		}
-
-		for {
-			time.Sleep(time.Duration(500) * time.Microsecond)
-			if elements.Clients.Size() <= 0 {
-				break
-			}
-
-			logger.Info(ns.ID(), "Network Listen [TCP/IP] Service The remaining %d connections need to be closed", elements.Clients.Size())
-			chk++
-			if chk > 6 {
-				break
-			}
-		}
-	}
-
-	logger.Info(ns.ID(), "Network Listen [TCP/IP] Service All connections are closed")
-
-	ns.TCPService.Shutdown()
-}
-
-func (ns *NetService) onAccept(self actor.Context, message interface{}) {
+func (ns *OutNetService) onAccept(self actor.Context, message interface{}) {
 	accepter := message.(*network.NetAccept)
-	if elements.Clients.Size()+1 > constant.GatewayMaxConnect {
+	if ns.CS.Size()+1 > constant.GatewayMaxConnect {
 		network.OperClose(accepter.Handle)
 		logger.Warning(self.Self().GetID(), "accept client fulled")
 		return
 	}
 
-	client, _, err := elements.Clients.Occupy(accepter.Handle, accepter.Addr, accepter.Port)
+	client, _, err := ns.CS.Occupy(accepter.Handle, accepter.Addr, accepter.Port)
 	if err != nil {
 		//close-socket
 		network.OperClose(accepter.Handle)
@@ -97,6 +69,8 @@ func (ns *NetService) onAccept(self actor.Context, message interface{}) {
 			accepter.Port)
 		return
 	}
+	//Bind gateway ID
+	client.(*clients.Client).SetGateway(constant.GatewayID)
 
 	network.OperOpen(accepter.Handle)
 	network.OperSetKeep(accepter.Handle, uint64(constant.GatewayConnectKleep))
@@ -107,14 +81,14 @@ func (ns *NetService) onAccept(self actor.Context, message interface{}) {
 	network.OperWrite(accepter.Handle, shake, len(shake))
 
 	//-------------------------------------------------
-	client.Stat.UpdateOnline(timer.Now())
-	elements.Clients.Release(client)
+	client.GetStat().UpdateOnline(timer.Now())
+	ns.CS.Release(client)
 	logger.Debug(self.Self().GetID(), "accept client %d-%s:%d", accepter.Handle, accepter.Addr.String(), accepter.Port)
 }
 
-func (ns *NetService) onRecv(self actor.Context, message interface{}) {
+func (ns *OutNetService) onRecv(self actor.Context, message interface{}) {
 	data := message.(*network.NetChunk)
-	hid, herr := elements.Clients.ToHandleID(data.Handle)
+	hKey, herr := ns.CS.ToKey(data.Handle)
 	if herr != nil {
 		logger.Trace(self.Self().GetID(), "recv error closed unfind map-id socket %d", data.Handle)
 		network.OperClose(data.Handle)
@@ -122,9 +96,9 @@ func (ns *NetService) onRecv(self actor.Context, message interface{}) {
 	}
 
 	recvHandle := util.NetHandle{}
-	recvHandle.Generate(constant.GatewayID, 0, int32(hid), data.Handle)
+	recvHandle.Generate(constant.GatewayID, 0, int32(hKey), data.Handle)
 
-	client := elements.Clients.Grap(&recvHandle)
+	client := ns.CS.Grap(recvHandle.HandleID())
 	if client == nil {
 		logger.Trace(self.Self().GetID(), "recv unfind player %d-%d-%d-%d",
 			recvHandle.GatewayID(),
@@ -146,14 +120,14 @@ func (ns *NetService) onRecv(self actor.Context, message interface{}) {
 	)
 
 	for {
-		space = constant.ConstPlayerBufferLimit - client.DataLen()
+		space = constant.ConstPlayerBufferLimit - client.GetData().Len()
 		wby = len(data.Data) - writed
 		if space > 0 && wby > 0 {
 			if space > wby {
 				space = wby
 			}
 
-			_, err := client.DataWrite(data.Data[pos : pos+space])
+			_, err := client.GetData().Write(data.Data[pos : pos+space])
 			if err != nil {
 				logger.Trace(self.Self().GetID(), "recv error %s socket %d", err.Error(), data.Handle)
 				network.OperClose(data.Handle)
@@ -163,11 +137,13 @@ func (ns *NetService) onRecv(self actor.Context, message interface{}) {
 			pos += space
 			writed += space
 
-			client.Stat.UpdateRecv(timer.Now(), uint64(space))
+			client.GetStat().UpdateRecv(timer.Now(), uint64(space))
 		}
 
+		c := client.(*clients.Client)
+
 		for {
-			pkName, pkData, pkErro = client.DataAnalysis()
+			pkName, pkData, pkErro = c.Analysis()
 			if pkErro != nil {
 				logger.Error(self.Self().GetID(), "recv error %s socket %d closing play", pkErro.Error(), data.Handle)
 				network.OperClose(data.Handle)
@@ -175,7 +151,7 @@ func (ns *NetService) onRecv(self actor.Context, message interface{}) {
 			}
 
 			if pkData != nil {
-				pkErro = ns.onRoute(client, pkName, pkData)
+				pkErro = ns.onRoute(c, pkName, pkData)
 				if pkErro != nil {
 					logger.Error(self.Self().GetID(), "route error %s socket %d closing play", pkErro.Error(), data.Handle)
 					network.OperClose(data.Handle)
@@ -193,14 +169,14 @@ func (ns *NetService) onRecv(self actor.Context, message interface{}) {
 		}
 	}
 releaseclient:
-	elements.Clients.Release(client)
+	ns.CS.Release(client)
 	logger.Debug(self.Self().GetID(), "Exit onRecv")
 }
 
-func (ns *NetService) onClose(self actor.Context, message interface{}) {
+func (ns *OutNetService) onClose(self actor.Context, message interface{}) {
 	closer := message.(*network.NetClose)
-	logger.Debug(self.Self().GetID(), "关闭")
-	hid, herr := elements.Clients.ToHandleID(closer.Handle)
+	logger.Debug(self.Self().GetID(), "close socket:%d", closer.Handle)
+	hid, herr := ns.CS.ToKey(closer.Handle)
 	if herr != nil {
 		logger.Trace(self.Self().GetID(), "close unfind map-id socket %d", closer.Handle)
 		return
@@ -209,7 +185,7 @@ func (ns *NetService) onClose(self actor.Context, message interface{}) {
 	closeHandle := util.NetHandle{}
 	closeHandle.Generate(constant.GatewayID, 0, int32(hid), closer.Handle)
 
-	client := elements.Clients.Grap(&closeHandle)
+	client := ns.CS.Grap(closeHandle.HandleID())
 	if client == nil {
 		logger.Trace(self.Self().GetID(), "close unfind client %d-%d-%d-%d",
 			closeHandle.GatewayID(),
@@ -219,34 +195,33 @@ func (ns *NetService) onClose(self actor.Context, message interface{}) {
 		goto unline
 	}
 
-	closeHandle = client.Handle
-	elements.Clients.Erase(&closeHandle)
-	elements.Clients.Release(client)
+	ns.CS.Erase(client.GetKey())
+	ns.CS.Release(client)
 
 	logger.Debug(self.Self().GetID(), "closed client %d-%d-%d-%d", closeHandle.GatewayID(),
 		closeHandle.WorldID(),
 		closeHandle.HandleID(),
 		closeHandle.SocketID())
 unline:
-	ns.pushOffline(&closeHandle)
+	ns.blukOffline(&closeHandle)
 }
 
-func (ns *NetService) onConfirm(self actor.Context, message interface{}) {
+func (ns *OutNetService) onConfirm(self actor.Context, message interface{}) {
 	confirm := message.(*agreement.CertificationConfirmation)
 	confirmHandle := util.NetHandle{}
 	confirmHandle.SetValue(confirm.Handle)
-	client := elements.Clients.Grap(&confirmHandle)
+	client := ns.CS.Grap(confirmHandle.HandleID())
 	if client == nil {
 		logger.Trace(self.Self().GetID(), "Authentication confirmation failed, target connection not found")
 		return
 	}
 
-	client.Auth = timer.Now()
+	client.SetAuth(timer.Now())
 
 	logger.Debug(self.Self().GetID(), "Connection authentication succeeded %+v", confirmHandle.HandleID)
 }
 
-func (ns *NetService) onRoute(client *clients.Client, name string, data []byte) error {
+func (ns *OutNetService) onRoute(client *clients.Client, name string, data []byte) error {
 	msgType := proto.MessageType(name)
 	if msgType == nil {
 		logger.Error(ns.ID(), "route error %s", route.ErrRouteAgreeUnDefined.Error())
@@ -259,7 +234,7 @@ func (ns *NetService) onRoute(client *clients.Client, name string, data []byte) 
 		return route.ErrRouteAgreeUnRegister
 	}
 
-	if adr.Auth && client.Auth == 0 {
+	if adr.Auth && client.GetAuth() == 0 {
 		logger.Error(ns.ID(), "route error Protocol needs to be verified, this connection is not verified and not verified")
 		return route.ErrRoutePlayerUnverified
 	}
@@ -269,10 +244,8 @@ func (ns *NetService) onRoute(client *clients.Client, name string, data []byte) 
 		return route.ErrRouteServiceNotStarted
 	}
 
-	//
-
 	actor.DefaultSchedulerContext.Send(&constant.ConnectServicePID,
-		&agreement.ForwardMessage{Handle: client.Handle.GetValue(),
+		&agreement.ForwardMessage{Handle: client.GetKeyValue(),
 			AgreementName: name,
 			ServerName:    adr.ServiceName,
 			Data:          data})
@@ -282,6 +255,31 @@ func (ns *NetService) onRoute(client *clients.Client, name string, data []byte) 
 	return nil
 }
 
-func (ns *NetService) pushOffline(h *util.NetHandle) {
+func (ns *OutNetService) blukOffline(h *util.NetHandle) {
+	if h.WorldID() == 0 {
+		logger.Debug(ns.ID(), "No need to log in to send offline notifications:[socket-%d]", h.SocketID())
+		return
+	}
 
+	pak := pkg.UnLoginRequest{}
+	pak.Tts = timer.Now()
+	data, err := proto.Marshal(&pak)
+
+	if err != nil {
+		logger.Error(ns.ID(), "forward offline message fail:%s", err)
+		return
+	}
+
+	if localTargetServiceNames == nil {
+		localTargetServiceNames = elements.Conns.GetGroupNames()
+	}
+
+	//Bulk offline notification
+	for _, name := range localTargetServiceNames {
+		actor.DefaultSchedulerContext.Send(&constant.ConnectServicePID,
+			&agreement.ForwardMessage{Handle: h.GetValue(),
+				AgreementName: "proto.UnLoginRequest",
+				ServerName:    name,
+				Data:          data})
+	}
 }
