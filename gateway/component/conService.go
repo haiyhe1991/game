@@ -1,7 +1,6 @@
 package component
 
 import (
-	"reflect"
 	"strings"
 	"sync"
 	"time"
@@ -32,13 +31,20 @@ func NewTCPConService() *ConService {
 	}).(*ConService)
 }
 
+//FromServiceMessage Message from the server
+type FromServiceMessage struct {
+	Handle uint64
+	Sock   int32
+	Name   string
+	Data   interface{}
+}
+
 //ConService Provide connection service
 type ConService struct {
 	service.Service
 	stopTicker     chan bool
 	workTicker     sync.WaitGroup
 	autoConnecting bool
-	handshake      interface{}
 	isShutdown     bool
 }
 
@@ -53,7 +59,10 @@ func (cse *ConService) Init() {
 	cse.RegisterMethod(&network.NetClose{}, cse.onClose)
 	cse.RegisterMethod(&agreement.ForwardMessage{}, cse.onForwardService)
 	cse.RegisterMethod(&agreement.CheckConnectMessage{}, cse.onCheckConnect)
-	cse.handshake = reflect.TypeOf(&pkg.HandshakeResponse{})
+	cse.RegisterMethod(&pkg.HandshakeResponse{}, cse.onHandshake)
+	cse.RegisterMethod(&pkg.GatewayRegisterResponse{}, cse.onRegisterResponse)
+	cse.RegisterMethod(&pkg.LoginResponse{}, cse.onLoginResponse)
+
 }
 
 //Started Start connecting service
@@ -221,13 +230,13 @@ func (cse *ConService) onRecv(self actor.Context, message interface{}) {
 			}
 
 			if pkData != nil {
-				//Determine whether it is handshake data
-				msgType := proto.MessageType(pkName)
-				if msgType != nil && msgType == cse.handshake {
-					csrv.SetAuth(timer.Now())
-					continue
+				if msgType := proto.MessageType(pkName); msgType != nil {
+					if f := cse.GetMethod(msgType); f != nil {
+						f(self, &FromServiceMessage{Handle: pkHandle, Sock: data.Handle, Name: pkName, Data: pkData})
+						continue
+					}
 				}
-				//Not a handshake agreement
+
 				cse.onForwardClient(self, pkHandle, pkName, pkData)
 				continue
 			}
@@ -251,6 +260,107 @@ func (cse *ConService) onClose(context actor.Context, message interface{}) {
 	conn.SetSocket(0)
 	conn.SetAuth(0)
 	conn.Clear()
+}
+
+func (cse *ConService) onHandshake(context actor.Context, message interface{}) {
+	msg := message.(*FromServiceMessage)
+	h := util.NetHandle{}
+	h.SetValue(msg.Handle)
+
+	conn := elements.Conns.GetHandle(msg.Sock)
+
+	if conn == nil {
+		logger.Error(context.Self().GetID(), "Handshake message did not find the target connection[socket:%d][%d][%s]", msg.Sock, conn.GetID(), conn.GetAddr())
+		return
+	}
+
+	logger.Debug(context.Self().GetID(), "Handshake message process target connection[socket:%d][%d][%s]", msg.Sock, conn.GetID(), conn.GetAddr())
+
+	pk := pkg.GatewayRegisterRequest{}
+	pk.Id = constant.GatewayID
+
+	regData, err := proto.Marshal(&pk)
+	if err != nil {
+		logger.Error(context.Self().GetID(), "Registration package build failed:%s,[socket:%d][%d][%s]", err.Error(), msg.Sock, conn.GetID(), conn.GetAddr())
+		return
+	}
+
+	regData = agreement.AgentParser(agreement.ConstInParser).Assemble(agreement.ConstArgeeVersion, h.GetValue(),
+		"proto.GatewayRegisterRequest",
+		regData,
+		int32(len(regData)))
+
+	err = network.OperWrite(conn.GetSocket(), regData, len(regData))
+	if err != nil {
+		logger.Error(context.Self().GetID(), "Registration package send failed:%s,[socket:%d][%d][%s]", err.Error(), msg.Sock, conn.GetID(), conn.GetAddr())
+		return
+	}
+
+	logger.Debug(context.Self().GetID(), "Registration package send success[socket:%d][%d][%s]", msg.Sock, conn.GetID(), conn.GetAddr())
+}
+
+func (cse *ConService) onRegisterResponse(context actor.Context, message interface{}) {
+	msg := message.(*FromServiceMessage)
+	h := util.NetHandle{}
+	h.SetValue(msg.Handle)
+
+	conn := elements.Conns.GetHandle(msg.Sock)
+
+	if conn == nil {
+		logger.Error(context.Self().GetID(), "Register Response Fail did not find the target connection [socket:%d]", msg.Sock)
+		return
+	}
+
+	var response pkg.GatewayRegisterResponse
+	err := proto.Unmarshal(msg.Data.([]byte), &response)
+
+	if err != nil {
+		logger.Error(context.Self().GetID(), "Register Response confirmation failed, resolution protocol failed %+v", err)
+		return
+	}
+
+	if response.Code != 0 {
+		logger.Error(context.Self().GetID(), "Register Response confirmation failed, %+v", err)
+		return
+	}
+
+	now := timer.Now()
+	conn.SetAuth(now)
+
+	logger.Debug(context.Self().GetID(), "Register Response confirmation success %+v, %s", conn.GetID(), conn.GetAddr())
+}
+
+func (cse *ConService) onLoginResponse(context actor.Context, message interface{}) {
+	msg := message.(*FromServiceMessage)
+
+	h := util.NetHandle{}
+	h.SetValue(msg.Handle)
+
+	tmpData := msg.Data.([]byte)
+
+	forwardData := agreement.AgentParser(agreement.ConstExParser).Assemble(agreement.ConstArgeeVersion, 0, msg.Name, tmpData, int32(len(tmpData)))
+	if forwardData == nil {
+		logger.Error(context.Self().GetID(), "Login Response Forward data error %s protocol data packaging failed", msg.Name)
+		return
+	}
+
+	network.OperWrite(h.SocketID(), forwardData, len(forwardData))
+
+	var response pkg.LoginResponse
+	err := proto.Unmarshal(msg.Data.([]byte), &response)
+	if err != nil {
+		logger.Error(context.Self().GetID(), "Authentication confirmation failed, resolution protocol failed %+v", err)
+		return
+	}
+
+	if response.Rep.State != 0 {
+		logger.Trace(context.Self().GetID(), "Authentication failed, the connection will be closed:%d", response.GetHandle())
+		network.OperClose(h.SocketID())
+		return
+	}
+
+	actor.DefaultSchedulerContext.Send(&constant.NetworkServicePID,
+		&agreement.CertificationConfirmation{Handle: h.GetValue()})
 }
 
 func (cse *ConService) onForwardClient(context actor.Context, handle uint64, agreementName string, data []byte) {
@@ -298,25 +408,6 @@ func (cse *ConService) onForwardClient(context actor.Context, handle uint64, agr
 	}
 
 	network.OperWrite(h.SocketID(), forwardData, len(forwardData))
-
-	if !re.Confirm {
-		return
-	}
-	var response pkg.LoginResponse
-	err := proto.Unmarshal(data, &response)
-	if err != nil {
-		logger.Error(context.Self().GetID(), "Authentication confirmation failed, resolution protocol failed %+v", err)
-		return
-	}
-
-	if response.Rep.State != 0 {
-		logger.Trace(context.Self().GetID(), "Authentication failed, the connection will be closed:%d", response.GetHandle())
-		network.OperClose(h.SocketID())
-		return
-	}
-
-	actor.DefaultSchedulerContext.Send(&constant.NetworkServicePID,
-		&agreement.CertificationConfirmation{Handle: h.GetValue()})
 }
 
 func (cse *ConService) restAutoConnection() {

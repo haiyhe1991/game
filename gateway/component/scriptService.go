@@ -48,13 +48,8 @@ func luaRegisterRoute(L *mlua.State) int {
 	agreementName := L.ToCheckString(1)
 	serviceName := L.ToCheckString(2)
 	auth := true
-	confirm := false
 	if argsNum > 2 {
 		auth = L.ToBoolean(3)
-	}
-
-	if argsNum > 3 {
-		confirm = L.ToBoolean(4)
 	}
 
 	agreementType := proto.MessageType(agreementName)
@@ -63,7 +58,8 @@ func luaRegisterRoute(L *mlua.State) int {
 		return 0
 	}
 
-	elements.RouteAddress.Register(agreementType, agreementName, serviceName, auth, confirm)
+	elements.RouteAddress.Register(agreementType, agreementName, serviceName, auth)
+
 	return 0
 }
 

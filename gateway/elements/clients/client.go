@@ -123,7 +123,7 @@ func (client *Client) RestRef() {
 	client.ref = 0
 }
 
-//Analysis Play protocol data analysis
+//Analysis Client protocol data analysis
 func (client *Client) Analysis() (string, []byte, error) {
 	name, _, data, err := agreement.AgentParser(agreement.ConstExParser).Analysis(client.GetData())
 	return name, data, err

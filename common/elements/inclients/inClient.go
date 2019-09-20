@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/yamakiller/game/common/elements/visitors"
+	"github.com/yamakiller/game/common/agreement"
 )
 
 //InClient Internal network client
@@ -124,4 +125,9 @@ func (client *InClient) DecRef() int {
 //RestRef xxx
 func (client *InClient) RestRef() {
 	client.ref = 0
+}
+
+//Analysis InClient protocol data analysis
+func (client *InClient) Analysis() (string, uint64, []byte, error) {
+	return agreement.AgentParser(agreement.ConstInParser).Analysis(client.GetData())
 }

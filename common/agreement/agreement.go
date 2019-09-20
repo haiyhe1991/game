@@ -5,6 +5,11 @@ import (
 	"github.com/yamakiller/magicNet/network/parser"
 )
 
+const (
+	//ConstArgeeVersion Protocol version number
+	ConstArgeeVersion = 1
+)
+
 //ForwardMessage Forward data event
 type ForwardMessage struct {
 	Handle        uint64

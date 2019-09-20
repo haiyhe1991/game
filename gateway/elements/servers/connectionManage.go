@@ -100,7 +100,7 @@ func AutoConnect(context actor.Context, c *Connection) error {
 			return fmt.Errorf("Automatic reconnection timeout does not wait for handshake data:%d", h)
 		}
 
-		time.Sleep(time.Millisecond * time.Duration(50))
+		time.Sleep(time.Millisecond * time.Duration(100))
 	}
 
 	return nil

@@ -145,7 +145,7 @@ func (ns *OutNetService) onRecv(self actor.Context, message interface{}) {
 		for {
 			pkName, pkData, pkErro = c.Analysis()
 			if pkErro != nil {
-				logger.Error(self.Self().GetID(), "recv error %s socket %d closing play", pkErro.Error(), data.Handle)
+				logger.Error(self.Self().GetID(), "recv error %s socket %d closing client", pkErro.Error(), data.Handle)
 				network.OperClose(data.Handle)
 				goto releaseclient
 			}
@@ -153,7 +153,7 @@ func (ns *OutNetService) onRecv(self actor.Context, message interface{}) {
 			if pkData != nil {
 				pkErro = ns.onRoute(c, pkName, pkData)
 				if pkErro != nil {
-					logger.Error(self.Self().GetID(), "route error %s socket %d closing play", pkErro.Error(), data.Handle)
+					logger.Error(self.Self().GetID(), "route error %s socket %d closing client", pkErro.Error(), data.Handle)
 					network.OperClose(data.Handle)
 					goto releaseclient
 				}

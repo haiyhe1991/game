@@ -1,0 +1,13 @@
+syntax = "proto3";
+package proto;
+
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+message GatewayRegisterRequest {
+    int32 id  = 1;
+}
+
+message GatewayRegisterResponse {
+    int32 code = 1;
+}

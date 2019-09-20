@@ -1,8 +1,6 @@
 package component
 
 import (
-	"reflect"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/game/common/agreement"
 	"github.com/yamakiller/game/common/elements/inclients"
@@ -13,6 +11,7 @@ import (
 	"github.com/yamakiller/magicNet/engine/logger"
 	"github.com/yamakiller/magicNet/network"
 	"github.com/yamakiller/magicNet/timer"
+	"github.com/yamakiller/magicNet/util"
 )
 
 /*
@@ -33,6 +32,14 @@ func NewTCPNetService() *OutNetService {
 }
 */
 
+//FromGatewayMessage Message from the gateway
+type FromGatewayMessage struct {
+	Handle uint64
+	Sock   int32
+	Name   string
+	Data   interface{}
+}
+
 //NewTCPINNetService Internal network service
 func NewTCPINNetService(addr string, ccmax int, cs visitors.IVisitorManager) *InNetService {
 	result := &InNetService{NetService: *NewTCPService(addr, ccmax, cs)}
@@ -45,26 +52,13 @@ func NewTCPINNetService(addr string, ccmax int, cs visitors.IVisitorManager) *In
 //InNetService Internal network service
 type InNetService struct {
 	NetService
-	netMethod map[interface{}]func(self actor.Context, message interface{})
 }
 
 //Init Initialize the network service object
 func (ns *InNetService) Init() {
 	ns.CS.(*inclients.InClientManager).Spawned()
-	ns.netMethod = make(map[interface{}]func(self actor.Context, message interface{}))
 	ns.TCPService.Init()
-}
-
-//RegisterNetMethod Registration network method
-func (ns *InNetService) RegisterNetMethod(agree interface{}, f func(self actor.Context, message interface{})) {
-	ns.netMethod[reflect.TypeOf(agree)] = f
-}
-
-func (ns *InNetService) getNetMethod(agree interface{}) func(self actor.Context, message interface{}) {
-	if f, ok := ns.netMethod[agree]; ok {
-		return f
-	}
-	return nil
+	ns.RegisterMethod(&pkg.GatewayRegisterRequest{}, ns.onGatewayRegister)
 }
 
 func (ns *InNetService) onAccept(self actor.Context, message interface{}) {
@@ -75,7 +69,7 @@ func (ns *InNetService) onAccept(self actor.Context, message interface{}) {
 		return
 	}
 
-	client, _, err := ns.CS.Occupy(accepter.Handle, accepter.Addr, accepter.Port)
+	client, k, err := ns.CS.Occupy(accepter.Handle, accepter.Addr, accepter.Port)
 	if err != nil {
 		//close-socket
 		network.OperClose(accepter.Handle)
@@ -91,8 +85,11 @@ func (ns *InNetService) onAccept(self actor.Context, message interface{}) {
 
 	//------------------------------------------------
 	//First handshake and agree on the key
+	h := util.NetHandle{}
+	h.Generate(0, 0, k, accepter.Handle)
+
 	shake, _ := proto.Marshal(&pkg.HandshakeResponse{Key: ""})
-	shake = agreement.AgentParser(agreement.ConstExParser).Assemble(1, 0, "proto.HandshakeResponse", shake, int32(len(shake)))
+	shake = agreement.AgentParser(agreement.ConstInParser).Assemble(agreement.ConstArgeeVersion, h.GetValue(), "proto.HandshakeResponse", shake, int32(len(shake)))
 	network.OperWrite(accepter.Handle, shake, len(shake))
 
 	//-------------------------------------------------
@@ -102,6 +99,89 @@ func (ns *InNetService) onAccept(self actor.Context, message interface{}) {
 }
 
 func (ns *InNetService) onRecv(self actor.Context, message interface{}) {
+	data := message.(*network.NetChunk)
+	k, err := ns.CS.ToKey(data.Handle)
+	if err != nil {
+		logger.Error(self.Self().GetID(), "Receive data error did not find service connection:%+v", err)
+		return
+	}
+
+	client := ns.CS.Grap(int32(k))
+	if client == nil {
+		logger.Error(self.Self().GetID(), "Receive data error did not find service connection:%+v", k)
+		return
+	}
+
+	var (
+		space  int
+		writed int
+		wby    int
+		pos    int
+
+		pkHandle uint64
+		pkName   string
+		pkData   []byte
+		pkErro   error
+	)
+
+	for {
+		space = constant.ConstPlayerBufferLimit - client.GetData().Len()
+		wby = len(data.Data) - writed
+		if space > 0 && wby > 0 {
+			if space > wby {
+				space = wby
+			}
+
+			_, err := client.GetData().Write(data.Data[pos : pos+space])
+			if err != nil {
+				logger.Trace(self.Self().GetID(), "recv error %s socket %d", err.Error(), data.Handle)
+				network.OperClose(data.Handle)
+				goto releaseclient
+			}
+
+			pos += space
+			writed += space
+
+			client.GetStat().UpdateRecv(timer.Now(), uint64(space))
+		}
+
+		c := client.(*inclients.InClient)
+
+		for {
+			pkName, pkHandle, pkData, pkErro = c.Analysis()
+			if pkErro != nil {
+				logger.Error(self.Self().GetID(), "recv error %s socket %d closing gateway", pkErro.Error(), data.Handle)
+				network.OperClose(data.Handle)
+				goto releaseclient
+			}
+
+			if pkData != nil {
+				msgType := proto.MessageType(pkName)
+				if msgType == nil {
+					logger.Error(self.Self().GetID(), "recv error unknown protocol %s socket %d from gateway", pkName, data.Handle)
+					continue
+				}
+
+				if f := ns.GetMethod(msgType); f != nil {
+					f(self, &FromGatewayMessage{Handle: pkHandle, Name: pkName, Sock: data.Handle, Data: pkData})
+				}
+				continue
+			}
+
+			if writed >= len(data.Data) {
+				goto releaseclient
+			} else {
+				break
+			}
+		}
+	}
+releaseclient:
+	ns.CS.Release(client)
+	logger.Debug(self.Self().GetID(), "Exit onRecv")
+}
+
+func (ns *InNetService) onGatewayRegister(self actor.Context, message interface{}) {
+
 }
 
 func (ns *InNetService) onClose(self actor.Context, message interface{}) {
