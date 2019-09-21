@@ -1,12 +1,7 @@
 package component
 
 import (
-	"github.com/gogo/protobuf/proto"
-	"github.com/yamakiller/game/gateway/constant"
-	"github.com/yamakiller/game/gateway/elements"
-	"github.com/yamakiller/magicNet/engine/logger"
 	"github.com/yamakiller/magicNet/script/stack"
-	"github.com/yamakiller/mgolua/mlua"
 )
 
 // ScriptService  lua script service
@@ -15,7 +10,7 @@ type ScriptService struct {
 }
 
 //Init Initialize the lua script service
-func (sse *ScriptService) Init() {
+/*func (sse *ScriptService) Init() {
 	sse.handle = stack.NewLuaStack()
 	sse.handle.GetLuaState().OpenLibs()
 	sse.handle.AddSreachPath(constant.GatewayLuaScriptPath)
@@ -85,4 +80,4 @@ func luaAppendServiceConnection(L *mlua.State) int {
 
 	grp.Register(serverName, int32(serverID), serverAddr)
 	return 0
-}
+}*/

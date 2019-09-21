@@ -1,28 +1,7 @@
 package component
 
-import (
-	"strings"
-	"sync"
-	"time"
-
-	"github.com/yamakiller/magicNet/timer"
-
-	"github.com/gogo/protobuf/proto"
-	pkg "github.com/yamakiller/game/proto"
-
-	"github.com/yamakiller/game/common/agreement"
-	"github.com/yamakiller/game/gateway/constant"
-	"github.com/yamakiller/game/gateway/elements"
-	"github.com/yamakiller/game/gateway/elements/servers"
-	"github.com/yamakiller/magicNet/engine/actor"
-	"github.com/yamakiller/magicNet/engine/logger"
-	"github.com/yamakiller/magicNet/network"
-	"github.com/yamakiller/magicNet/service"
-	"github.com/yamakiller/magicNet/util"
-)
-
 //NewTCPConService Create a connection service
-func NewTCPConService() *ConService {
+/*func NewTCPConService() *ConService {
 	return service.Make(constant.ConstConnectServiceName, func() service.IService {
 		handle := &ConService{}
 
@@ -412,4 +391,4 @@ func (cse *ConService) onForwardClient(context actor.Context, handle uint64, agr
 
 func (cse *ConService) restAutoConnection() {
 	cse.autoConnecting = false
-}
+}*/

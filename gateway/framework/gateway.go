@@ -52,8 +52,8 @@ func (gw *GatewayFrame) InitService() error {
 	gw.luaService = &component.ScriptService{}
 	gw.luaService.Init()
 
-	gw.conService = component.NewTCPConService()
-	gw.netService = component.NewTCPNetService()
+	//gw.conService = component.NewTCPConService()
+	gw.netService = component.NewGatewayListener()
 
 	return nil
 }

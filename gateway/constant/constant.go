@@ -5,12 +5,12 @@ import (
 )
 
 const (
-	//ConstPlayerMax play number of max
-	ConstPlayerMax = 65535
-	//ConstPlayerIDMask play ID of mask
-	ConstPlayerIDMask = 0xFF
-	//ConstPlayerBufferLimit Read buffer Max Cap
-	ConstPlayerBufferLimit = 4096
+	//ConstClientMax play number of max
+	ConstClientMax = 65535
+	//ConstClientIDMask play ID of mask
+	ConstClientIDMask = 0xFFFFFF
+	//ConstClientBufferLimit Read buffer Max Cap
+	ConstClientBufferLimit = 4096
 	//ConstConnectGroupMax Maximum number of connectable services
 	ConstConnectGroupMax = 128
 	//ConstConnectChanMax Maximum chan data buffer limit for connection services

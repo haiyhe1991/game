@@ -1,6 +1,72 @@
 package component
 
 import (
+	"github.com/gogo/protobuf/proto"
+	"github.com/yamakiller/game/common/agreement"
+	"github.com/yamakiller/game/gateway/constant"
+	"github.com/yamakiller/game/gateway/elements/clients"
+	"github.com/yamakiller/magicNet/engine/actor"
+	"github.com/yamakiller/magicNet/service/implement"
+	"github.com/yamakiller/magicNet/service/net"
+	"github.com/yamakiller/magicNet/util"
+)
+
+func NewGatewayListener() *GatewayListener {
+	return &GatewayListener{NetListenService: implement.NetListenService{NetListen: &net.TCPListen{},
+		NetDeleate:            &GNetListenDeleate{},
+		NetClients:            clients.NewGClientManager(),
+		ClientKeep:            uint64(constant.GatewayConnectKleep),
+		ClientRecvBufferLimit: constant.ConstClientBufferLimit}}
+}
+
+//INetListenDeleate
+type GNetListenDeleate struct {
+}
+
+func (gnld *GNetListenDeleate) Handshake(sock int32) {
+
+}
+
+func (gnld *GNetListenDeleate) Analysis(context actor.Context, nets *implement.NetListenService, c implement.INetClient) error {
+	name, _, data, err := agreement.AgentParser(agreement.ConstExParser).Analysis(c.GetRecvBuffer())
+	if err != nil {
+		return err
+	}
+
+	if data == nil {
+		return implement.ErrAnalysisProceed
+	}
+
+	msgType := proto.MessageType(name)
+	if msgType != nil {
+		if f := nets.GetMethod(msgType); f != nil {
+			f(context, data)
+			goto end
+		}
+	}
+
+	//数据转发 全局路由表
+end:
+	//return name, data, err
+	return implement.ErrAnalysisSuccess
+}
+
+func (gnld *GNetListenDeleate) UnOnline(h util.NetHandle) {
+
+}
+
+//GatewayListener Gateway Internet monitoring service
+type GatewayListener struct {
+	implement.NetListenService
+}
+
+//Init Gateway Internet listening service initialization
+func (gnet *GatewayListener) Init() {
+	gnet.NetListenService.Init()
+	//TODO:
+}
+
+/*import (
 	"github.com/yamakiller/magicNet/timer"
 	"github.com/yamakiller/magicNet/util"
 
@@ -282,4 +348,4 @@ func (ns *OutNetService) blukOffline(h *util.NetHandle) {
 				ServerName:    name,
 				Data:          data})
 	}
-}
+}*/
