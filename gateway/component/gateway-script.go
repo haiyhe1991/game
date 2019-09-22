@@ -60,6 +60,8 @@ func luaRegisterForward(L *mlua.State) int {
 
 	elements.ForwardAddresses.Register(protocolType, protocolName, serverName, auth)
 
+	logger.Debug(0, "Gateway Registration Forward Address %s,%s,%+v", protocolName, serverName, auth)
+
 	return 0
 }
 
@@ -82,6 +84,6 @@ func luaRegisterTargetService(L *mlua.State) int {
 		logger.Error(0, "Gateway Registration TargetConnection fail error: %+v", err)
 	}
 
-	logger.Debug(0, "Gateway Registration TargetConnection %d,%s,%d", targetID, targetName, targetAddr)
+	logger.Debug(0, "Gateway Registration TargetConnection %d,%s,%s", targetID, targetName, targetAddr)
 	return 0
 }
