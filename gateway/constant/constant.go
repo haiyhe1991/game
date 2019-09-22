@@ -1,9 +1,5 @@
 package constant
 
-import (
-	"github.com/yamakiller/magicNet/engine/actor"
-)
-
 const (
 	//ConstClientMax play number of max
 	ConstClientMax = 65535
@@ -18,9 +14,9 @@ const (
 	//ConstConnectForwardErrMax  Push failure maximum retries
 	ConstConnectForwardErrMax = 16
 	//ConstNetworkServiceName Network service name
-	ConstNetworkServiceName = "Service/Gateway/Network"
+	ConstNetworkServiceName = "Service/Gateway/Listen"
 	//ConstConnectServiceName The name of the connection service
-	ConstConnectServiceName = "Service/Gateway/Connection"
+	ConstConnectServiceName = "Service/Gateway/Forward"
 	//ConstConnectAutoTick Automatic connection detection interval event
 	ConstConnectAutoTick = 100 // Unit millisecond
 )
@@ -40,8 +36,8 @@ var (
 	GatewayLuaScriptPath string
 	//GatewayLuaScriptFile Gateway default script name
 	GatewayLuaScriptFile string
-	//ConnectServicePID Connected service ACTOR PID
-	ConnectServicePID actor.PID
-	//NetworkServicePID ACTOR PID for network services
-	NetworkServicePID actor.PID
+	//GatewayLogoutName Login to the name of the logout server
+	GatewayLogoutName string
+	//GatewayLogoutPactun Login and sign-out agreement
+	GatewayLogoutPactun string
 )

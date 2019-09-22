@@ -1,9 +1,18 @@
 package component
 
 import (
+	"fmt"
+	"reflect"
+
+	"github.com/yamakiller/game/gateway/elements/forward"
+	"github.com/yamakiller/game/pactum"
+
+	"github.com/yamakiller/magicNet/network"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/game/common/agreement"
 	"github.com/yamakiller/game/gateway/constant"
+	"github.com/yamakiller/game/gateway/elements"
 	"github.com/yamakiller/game/gateway/elements/clients"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/service/implement"
@@ -11,6 +20,7 @@ import (
 	"github.com/yamakiller/magicNet/util"
 )
 
+//NewGatewayListener Create a network listening service
 func NewGatewayListener() *GatewayListener {
 	return &GatewayListener{NetListenService: implement.NetListenService{NetListen: &net.TCPListen{},
 		NetDeleate:            &GNetListenDeleate{},
@@ -19,40 +29,84 @@ func NewGatewayListener() *GatewayListener {
 		ClientRecvBufferLimit: constant.ConstClientBufferLimit}}
 }
 
-//INetListenDeleate
+//GNetListenDeleate network listening service, delegate logic
 type GNetListenDeleate struct {
 }
 
-func (gnld *GNetListenDeleate) Handshake(sock int32) {
-
+//Handshake Handshake processing
+func (gnld *GNetListenDeleate) Handshake(sock int32) error {
+	shake, _ := proto.Marshal(&pactum.HandshakeResponse{Key: ""})
+	shake = agreement.AgentParser(agreement.ConstExParser).Assemble(1, 0, "proto.HandshakeResponse", shake, int32(len(shake)))
+	if err := network.OperWrite(sock, shake, len(shake)); err != nil {
+		return err
+	}
+	return nil
 }
 
+//Analysis Client packet analysis from the Internet
 func (gnld *GNetListenDeleate) Analysis(context actor.Context, nets *implement.NetListenService, c implement.INetClient) error {
-	name, _, data, err := agreement.AgentParser(agreement.ConstExParser).Analysis(c.GetRecvBuffer())
+	name, _, wrap, err := agreement.AgentParser(agreement.ConstExParser).Analysis(c.GetRecvBuffer())
 	if err != nil {
 		return err
 	}
 
-	if data == nil {
+	if wrap == nil {
 		return implement.ErrAnalysisProceed
 	}
 
+	var unit *forward.Unit
 	msgType := proto.MessageType(name)
 	if msgType != nil {
 		if f := nets.GetMethod(msgType); f != nil {
-			f(context, data)
+			f(context, wrap)
 			goto end
 		}
 	}
 
-	//数据转发 全局路由表
+	unit = elements.ForwardAddresses.Sreach(msgType)
+	if unit == nil {
+		return fmt.Errorf("Abnormal protocol, no protocol information defined")
+	}
+
+	if unit.Auth && c.GetAuth() == 0 {
+		return forward.ErrForwardClientUnverified
+	}
+
+	if elements.ForwardServer.ID == 0 {
+		return forward.ErrForwardServiceNotStarted
+	}
+
+	actor.DefaultSchedulerContext.Send(&elements.ForwardServer,
+		&agreement.ForwardEvent{Handle: c.GetID().GetValue(),
+			PactunName: name,
+			ServoName:  unit.ServoName,
+			Data:       wrap})
 end:
 	//return name, data, err
 	return implement.ErrAnalysisSuccess
 }
 
-func (gnld *GNetListenDeleate) UnOnline(h util.NetHandle) {
+//UnOnlineNotification Offline notification
+func (gnld *GNetListenDeleate) UnOnlineNotification(h util.NetHandle) error {
+	//
 
+	msgType := proto.MessageType(constant.GatewayLogoutPactun)
+	if msgType == nil {
+		return fmt.Errorf("An error occurred while processing the offline notification. The %s protocol is not defined",
+			constant.GatewayLogoutPactun)
+	}
+
+	wrap, err := proto.Marshal(reflect.Indirect(reflect.New(msgType.Elem())).Addr().Interface().(proto.Message))
+	if err != nil {
+		return err
+	}
+
+	actor.DefaultSchedulerContext.Send(&elements.ForwardServer,
+		&agreement.ForwardEvent{Handle: h.GetValue(),
+			PactunName: constant.GatewayLogoutPactun,
+			ServoName:  constant.GatewayLogoutName,
+			Data:       wrap})
+	return nil
 }
 
 //GatewayListener Gateway Internet monitoring service
@@ -62,6 +116,7 @@ type GatewayListener struct {
 
 //Init Gateway Internet listening service initialization
 func (gnet *GatewayListener) Init() {
+	gnet.NetClients.Init()
 	gnet.NetListenService.Init()
 	//TODO:
 }

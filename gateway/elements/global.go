@@ -1,23 +1,29 @@
 package elements
 
 import (
-	"github.com/yamakiller/game/gateway/elements/route"
+	"github.com/yamakiller/game/gateway/elements/forward"
 	"github.com/yamakiller/game/gateway/elements/servers"
+	"github.com/yamakiller/magicNet/engine/actor"
 )
 
 var (
-	//RouteAddress Routing address table
-	RouteAddress *route.Table
-	//Clients Manage all externally connected players
-	//Clients *clients.GClientManager
-	//Conns Connection service manager
-	Conns *servers.ConnectionManager
+	//ForwardAddresses Routing address table
+	ForwardAddresses *forward.Table
+	//TargetRecord Connection configuration status information of the target server
+	TargetRecord *servers.TargetGroup
+	//Conns *servers.ConnectionManager
+	//ForwardServer ACTOR PID for Service module for data interaction with other servers
+	ForwardServer actor.PID
+	//ListenServer ACTOR PID for network listen services
+	ListenServer actor.PID
 )
 
 func init() {
-	RouteAddress = route.NewTable()
+	ForwardAddresses = forward.NewTable()
+	TargetRecord = servers.NewTargetGroup()
+	TargetRecord.Init()
 	//Clients = clients.NewGClientManager()
-	Conns = servers.NewManager()
+	//Conns = servers.NewManager()
 
 	//preset.SetSingleLimit(constant.ConstPlayerBufferLimit >> 1)
 }

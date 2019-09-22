@@ -1,5 +1,5 @@
 syntax = "proto3";
-package proto;
+package pactum;
 
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";

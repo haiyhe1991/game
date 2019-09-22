@@ -57,10 +57,22 @@ func clientComparator(a, b interface{}) int {
 //
 //GClientManager Gateway client manager
 type GClientManager struct {
+	serverid int32
 	table.HashTable
 	implement.NetClientManager
 	smp map[int32]int32
 	sync.Mutex
+}
+
+//Init Initialize the gateway client manager
+func (gcm *GClientManager) Init() {
+	gcm.smp = make(map[int32]int32, 128)
+	gcm.HashTable.Init()
+}
+
+//Association Associate current server ID
+func (gcm *GClientManager) Association(id int32) {
+	gcm.serverid = id
 }
 
 //Occupy xxxx
@@ -74,7 +86,7 @@ func (gcm *GClientManager) Occupy(c implement.INetClient) (*util.NetHandle, erro
 
 	c.SetRef(2)
 	h := c.GetID()
-	h.Generate(h.GetServiceID(), int32(key), h.GetSocket())
+	h.Generate(gcm.serverid, int32(key), h.GetSocket())
 	gcm.smp[h.GetSocket()] = int32(key)
 
 	return h, nil

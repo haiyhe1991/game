@@ -1,6 +1,6 @@
 package servers
 
-import (
+/*import (
 	"bytes"
 
 	"github.com/yamakiller/game/common/agreement"
@@ -90,7 +90,7 @@ func (c *Connection) Clear() {
 //Analysis Analytic data protocol
 func (c *Connection) Analysis() (string, uint64, []byte, error) {
 	return agreement.AgentParser(agreement.ConstInParser).Analysis(c.data)
-}
+}*/
 
 /*// ConnStat Connection status information
 type ConnStat struct {

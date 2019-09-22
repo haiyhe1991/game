@@ -1,6 +1,6 @@
 package servers
 
-import (
+/*import (
 	"fmt"
 	"time"
 
@@ -105,3 +105,4 @@ func AutoConnect(context actor.Context, c *Connection) error {
 
 	return nil
 }
+*/

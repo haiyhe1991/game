@@ -10,12 +10,12 @@ const (
 	ConstArgeeVersion = 1
 )
 
-//ForwardMessage Forward data event
-type ForwardMessage struct {
-	Handle        uint64
-	AgreementName string
-	ServerName    string
-	Data          []byte
+//ForwardEvent Forward data event
+type ForwardEvent struct {
+	Handle     uint64
+	PactunName string
+	ServoName  string
+	Data       []byte
 }
 
 //CheckConnectMessage Check the connection status event to achieve automatic reconnection after disconnection

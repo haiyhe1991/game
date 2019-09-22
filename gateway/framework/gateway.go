@@ -3,6 +3,12 @@ package framework
 import (
 	"errors"
 
+	"github.com/yamakiller/game/gateway/elements/clients"
+
+	"github.com/yamakiller/magicNet/service"
+	"github.com/yamakiller/magicNet/service/implement"
+	"github.com/yamakiller/magicNet/service/net"
+
 	"github.com/yamakiller/game/gateway/component"
 	"github.com/yamakiller/game/gateway/constant"
 
@@ -24,9 +30,10 @@ type GatewayFrame struct {
 	max  int
 
 	//
-	luaService *component.ScriptService
-	conService *component.ConService
-	netService *component.OutNetService
+	scriptLua *component.GatewayScirpt
+	netListen *component.GatewayListener
+	//conService *component.ConService
+	//netService *component.OutNetService
 }
 
 //InitService init gateway system
@@ -49,11 +56,28 @@ func (gw *GatewayFrame) InitService() error {
 	constant.GatewayLuaScriptPath = util.GetEnvString(gatewayEnv, "lua-script-path", "./script")
 	constant.GatewayLuaScriptFile = util.GetEnvString(gatewayEnv, "lua-script-file", "./script/gateway.lua")
 
-	gw.luaService = &component.ScriptService{}
-	gw.luaService.Init()
+	gw.scriptLua = &component.GatewayScirpt{}
+	gw.scriptLua.Init()
 
 	//gw.conService = component.NewTCPConService()
-	gw.netService = component.NewGatewayListener()
+	gw.netListen = func() *component.GatewayListener {
+		return service.Make(constant.ConstNetworkServiceName, func() service.IService {
+
+			h := &component.GatewayListener{NetListenService: implement.NetListenService{NetListen: &net.TCPListen{},
+				NetDeleate:            &component.GNetListenDeleate{},
+				NetClients:            clients.NewGClientManager(),
+				ClientKeep:            uint64(constant.GatewayConnectKleep),
+				ClientRecvBufferLimit: constant.ConstClientBufferLimit}}
+
+			h.MaxClient = constant.GatewayMaxConnect
+			h.CCMax = constant.GatewayCCMax
+			h.Addr = constant.GatewayAddr
+			h.NetClients.(*clients.GClientManager).Association(constant.GatewayID)
+			h.Init()
+			return h
+
+		}).(*component.GatewayListener)
+	}()
 
 	return nil
 }
@@ -61,19 +85,19 @@ func (gw *GatewayFrame) InitService() error {
 //CloseService close gateway system
 func (gw *GatewayFrame) CloseService() {
 
-	if gw.netService != nil {
-		gw.netService.Shutdown()
-		gw.netService = nil
+	if gw.netListen != nil {
+		gw.netListen.Shutdown()
+		gw.netListen = nil
 	}
 
-	if gw.conService != nil {
+	/*if gw.conService != nil {
 		gw.conService.Shutdown()
 		gw.conService = nil
-	}
+	}*/
 
-	if gw.luaService != nil {
-		gw.luaService.Shutdown()
-		gw.luaService = nil
+	if gw.scriptLua != nil {
+		gw.scriptLua.Shutdown()
+		gw.scriptLua = nil
 	}
 }
 
@@ -86,3 +110,13 @@ func (gw *GatewayFrame) VarValue() {
 func (gw *GatewayFrame) LineOption() {
 	gw.dcmd.LineOption()
 }
+
+//NewTCPConService Create a connection service
+/*func NewTCPConService() *ConService {
+	return service.Make(constant.ConstConnectServiceName, func() service.IService {
+		handle := &ConService{}
+
+		handle.Init()
+		return handle
+	}).(*ConService)
+}*/

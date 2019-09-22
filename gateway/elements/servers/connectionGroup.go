@@ -1,6 +1,6 @@
 package servers
 
-import (
+/*import (
 	"strconv"
 
 	"github.com/yamakiller/magicNet/util"
@@ -47,4 +47,4 @@ func (cgs *ConnectionGroup) HashConnection(name string, id int32) (*Connection, 
 	}
 
 	return v.(*Connection), nil
-}
+}*/
