@@ -55,6 +55,11 @@ func (gw *GatewayFrame) InitService() error {
 	constant.GatewayConnectKleep = util.GetEnvInt(gatewayEnv, "connection-kleep", 1000*30)
 	constant.GatewayLuaScriptPath = util.GetEnvString(gatewayEnv, "lua-script-path", "./script")
 	constant.GatewayLuaScriptFile = util.GetEnvString(gatewayEnv, "lua-script-file", "./script/gateway.lua")
+	constant.GatewayLogoutName = util.GetEnvString(gatewayEnv, "login-logout-name", "sign/in/out")
+	constant.GatewayLogoutPactum = util.GetEnvString(gatewayEnv, "logout-protocol-name", "UnLoginRequest")
+	constant.GatewayConnectForwardErrMax = util.GetEnvInt(gatewayEnv, "forward-connect-fail-retry", 16)
+	constant.GatewayConnectForwardInterval = util.GetEnvInt(gatewayEnv, "forward-reconnect-interval", 200)
+	constant.GatewayConnectForwardAutoTick = util.GetEnvInt(gatewayEnv, "forward-check-connect-interval", 1000)
 
 	gw.scriptLua = &component.GatewayScirpt{}
 	gw.scriptLua.Init()

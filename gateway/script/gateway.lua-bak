@@ -1,3 +1,4 @@
-register_route("proto.LoginRequest", "login", false)
-register_route("proto.LoginResponse", "client", false, true)
-register_service_group("login")
+--register proto route
+register_forward("pactum.LoginRequest", "sign/in/out", false)
+register_forward("pactum.LoginResponse", "client", false)
+register_target_connect(1000, "sign/in/out", "127.0.0.1:9800", 128, "Combo to the login processing server")

@@ -11,14 +11,10 @@ const (
 	ConstConnectGroupMax = 128
 	//ConstConnectChanMax Maximum chan data buffer limit for connection services
 	ConstConnectChanMax = 256
-	//ConstConnectForwardErrMax  Push failure maximum retries
-	ConstConnectForwardErrMax = 16
 	//ConstNetworkServiceName Network service name
 	ConstNetworkServiceName = "Service/Gateway/Listen"
 	//ConstForwardServiceName The name of the connection service
 	ConstForwardServiceName = "Service/Gateway/Forward"
-	//ConstConnectAutoTick Automatic connection detection interval event
-	ConstConnectAutoTick = 100 // Unit millisecond
 )
 
 var (
@@ -38,6 +34,13 @@ var (
 	GatewayLuaScriptFile string
 	//GatewayLogoutName Login to the name of the logout server
 	GatewayLogoutName string
-	//GatewayLogoutPactun Login and sign-out agreement
-	GatewayLogoutPactun string
+	//GatewayLogoutPactum Login and sign-out agreement
+	GatewayLogoutPactum string
+
+	//GatewayConnectForwardErrMax Gateway connector automatic reconnection attempts
+	GatewayConnectForwardErrMax int
+	//GatewayConnectForwardInterval Automatic reconnection attempt interval, in milliseconds
+	GatewayConnectForwardInterval int
+	//GatewayConnectForwardAutoTick Automatic reconnection interval
+	GatewayConnectForwardAutoTick int
 )

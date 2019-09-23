@@ -13,7 +13,7 @@ const (
 //ForwardServerEvent Forward data to server is event
 type ForwardServerEvent struct {
 	Handle     uint64
-	PactunName string
+	PactumName string
 	ServoName  string
 	Data       []byte
 }

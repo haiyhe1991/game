@@ -80,7 +80,7 @@ func (gnld *GNetListenDeleate) Analysis(context actor.Context, nets *implement.N
 
 	actor.DefaultSchedulerContext.Send(fpid,
 		&agreement.ForwardServerEvent{Handle: c.GetID().GetValue(),
-			PactunName: name,
+			PactumName: name,
 			ServoName:  unit.ServoName,
 			Data:       wrap})
 end:
@@ -92,10 +92,10 @@ end:
 func (gnld *GNetListenDeleate) UnOnlineNotification(h util.NetHandle) error {
 	//
 
-	msgType := proto.MessageType(constant.GatewayLogoutPactun)
+	msgType := proto.MessageType(constant.GatewayLogoutPactum)
 	if msgType == nil {
 		return fmt.Errorf("An error occurred while processing the offline notification. The %s protocol is not defined",
-			constant.GatewayLogoutPactun)
+			constant.GatewayLogoutPactum)
 	}
 
 	wrap, err := proto.Marshal(reflect.Indirect(reflect.New(msgType.Elem())).Addr().Interface().(proto.Message))
@@ -110,7 +110,7 @@ func (gnld *GNetListenDeleate) UnOnlineNotification(h util.NetHandle) error {
 
 	actor.DefaultSchedulerContext.Send(fpid,
 		&agreement.ForwardServerEvent{Handle: h.GetValue(),
-			PactunName: constant.GatewayLogoutPactun,
+			PactumName: constant.GatewayLogoutPactum,
 			ServoName:  constant.GatewayLogoutName,
 			Data:       wrap})
 	return nil

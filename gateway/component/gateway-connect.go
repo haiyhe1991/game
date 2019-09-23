@@ -2,6 +2,7 @@ package component
 
 import (
 	"bytes"
+	"time"
 
 	"github.com/yamakiller/magicNet/timer"
 
@@ -112,7 +113,9 @@ end:
 //GatewayConnect Gateway connector
 type GatewayConnect struct {
 	implement.NetConnectService
-	GatewayID int32
+	GatewayID        int32
+	AutoErrRetry     int //Automatic connection failure retries
+	AutoErrRetryTime int //Automatic connection failure retry interval unit milliseconds
 }
 
 //Init Initialize connector
@@ -120,6 +123,7 @@ func (gconn *GatewayConnect) Init() {
 	gconn.NetConnectService.Init()
 	gconn.RegisterMethod(&pactum.HandshakeResponse{}, gconn.onNetHandshake)
 	gconn.RegisterMethod(&pactum.GatewayRegisterResponse{}, gconn.onNetRegisterResponse)
+	gconn.RegisterMethod(&agreement.ForwardServerEvent{}, gconn.onForwardServer)
 }
 
 func (gconn *GatewayConnect) onNetHandshake(context actor.Context, message interface{}) {
@@ -175,4 +179,65 @@ func (gconn *GatewayConnect) onNetRegisterResponse(context actor.Context, messag
 	return
 unend:
 	gconn.Target.SetEtat(implement.UnConnected)
+}
+
+func (gconn *GatewayConnect) onForwardServer(context actor.Context, message interface{}) {
+
+	ick := 0
+	var err error
+	request := message.(*agreement.ForwardServerEvent)
+	for {
+		if gconn.IsShutdown() {
+			gconn.LogWarning("Service has been terminated, data is discarded:%s", request.PactumName)
+			return
+		}
+
+		if gconn.Target.GetEtat() != implement.Connected {
+			if gconn.Target.GetEtat() == implement.UnConnected {
+				err = gconn.NetConnectService.AutoConnect(context)
+				if err != nil {
+					gconn.LogError("onForwardServer: AutoConnect fail:%+v", err)
+
+				}
+			} else {
+				if outTime := gconn.Target.IsTimeout(); outTime > 0 {
+					gconn.LogWarning("onForwardServer: AutoConnect TimeOut:%d millisecond", outTime)
+					gconn.Target.RestTimeout()
+					gconn.Handle.Close()
+				}
+			}
+		} else {
+			break
+		}
+
+		ick++
+		if ick > gconn.AutoErrRetry {
+			gconn.LogError("OnForwardServer AutoConnect fail, Data is discarded %+v %s %s %d check num:%d",
+				request.Handle,
+				request.PactumName,
+				request.ServoName,
+				len(request.Data),
+				ick)
+			return
+		}
+		time.Sleep(time.Duration(gconn.AutoErrRetryTime) * time.Millisecond)
+	}
+
+	//Assembling the inner net package
+	fdata := agreement.AgentParser(agreement.ConstInParser).Assemble(1,
+		request.Handle,
+		request.PactumName,
+		request.Data,
+		int32(len(request.Data)))
+
+	//Send
+	if err = gconn.Handle.Write(fdata, len(fdata)); err != nil {
+		gconn.LogError("OnForwardServer Send fail, Data is discarded %+v %s %s %d",
+			request.Handle,
+			request.PactumName,
+			request.ServoName,
+			len(request.Data))
+		return
+	}
+	gconn.LogDebug("OnForwardServer Send %s success", request.PactumName)
 }

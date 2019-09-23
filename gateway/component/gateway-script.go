@@ -68,22 +68,35 @@ func luaRegisterForward(L *mlua.State) int {
 func luaRegisterTargetService(L *mlua.State) int {
 	argsNum := L.GetTop()
 	if argsNum < 3 {
-		return L.Error("append service connection error need 3 parameters")
+		return L.Error("append service connection error need 5-6 parameters[ID,Name,Address,Timeout, outChanMax]")
 	}
 	targetID := int32(L.ToCheckInteger(1))
 	targetName := L.ToCheckString(2)
 	targetAddr := L.ToCheckString(3)
+	targetTimeout := L.ToCheckInteger(4)
+	targetOutChanMax := L.ToCheckInteger(5)
 
 	targetDesc := ""
-	if argsNum > 3 {
-		targetDesc = L.ToCheckString(4)
+	if argsNum > 5 {
+		targetDesc = L.ToCheckString(6)
 	}
 
-	err := elements.TargetRecord.Push(&servers.TargetConnection{ID: targetID, Name: targetName, Addr: targetAddr, Desc: targetDesc})
+	err := elements.TSets.Push(&servers.TargetConnection{ID: targetID,
+		Name:       targetName,
+		Addr:       targetAddr,
+		Desc:       targetDesc,
+		TimeOut:    uint64(targetTimeout),
+		OutChanMax: int(targetOutChanMax)})
+
 	if err != nil {
 		logger.Error(0, "Gateway Registration TargetConnection fail error: %+v", err)
 	}
 
-	logger.Debug(0, "Gateway Registration TargetConnection %d,%s,%s", targetID, targetName, targetAddr)
+	logger.Debug(0, "Gateway Registration TargetConnection ID:%d Name:%s Addr:%s,Timeout:%d milli ,out-chan-max:%d",
+		targetID,
+		targetName,
+		targetAddr,
+		targetTimeout,
+		targetOutChanMax)
 	return 0
 }

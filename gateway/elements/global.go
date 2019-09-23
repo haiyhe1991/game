@@ -9,17 +9,15 @@ import (
 var (
 	//ForwardAddresses Routing address table
 	ForwardAddresses *forward.Table
-	//TargetRecord Connection configuration status information of the target server
-	TargetRecord *servers.TargetGroup
-	//Conns *servers.ConnectionManager
+	//TSets Connection configuration status information of the target server
+	TSets *servers.TargetSet
 	//SSets Service set
 	SSets *manager.SSets
 )
 
 func init() {
 	ForwardAddresses = forward.NewTable()
-	TargetRecord = servers.NewTargetGroup()
-	TargetRecord.Init()
+	TSets = servers.NewTargetSet()
 	SSets = manager.NewSSets()
 	//Clients = clients.NewGClientManager()
 	//Conns = servers.NewManager()
