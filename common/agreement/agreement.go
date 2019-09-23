@@ -10,11 +10,18 @@ const (
 	ConstArgeeVersion = 1
 )
 
-//ForwardEvent Forward data event
-type ForwardEvent struct {
+//ForwardServerEvent Forward data to server is event
+type ForwardServerEvent struct {
 	Handle     uint64
 	PactunName string
 	ServoName  string
+	Data       []byte
+}
+
+//ForwardClientEvent Forward data to client is event
+type ForwardClientEvent struct {
+	Handle     uint64
+	PactunName string
 	Data       []byte
 }
 

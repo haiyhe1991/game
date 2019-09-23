@@ -15,8 +15,8 @@ const (
 	ConstConnectForwardErrMax = 16
 	//ConstNetworkServiceName Network service name
 	ConstNetworkServiceName = "Service/Gateway/Listen"
-	//ConstConnectServiceName The name of the connection service
-	ConstConnectServiceName = "Service/Gateway/Forward"
+	//ConstForwardServiceName The name of the connection service
+	ConstForwardServiceName = "Service/Gateway/Forward"
 	//ConstConnectAutoTick Automatic connection detection interval event
 	ConstConnectAutoTick = 100 // Unit millisecond
 )

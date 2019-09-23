@@ -3,8 +3,12 @@ package pactum;
 
 
 import "github.com/gogo/protobuf/gogoproto/gogo.proto";
-import "response.proto";
 
 message GatewayRegisterRequest {
     int32 id  = 1;
+}
+
+message GatewayRegisterResponse {
+    int32  code    = 1;
+    string message = 2;
 }

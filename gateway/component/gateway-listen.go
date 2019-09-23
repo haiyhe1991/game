@@ -55,6 +55,7 @@ func (gnld *GNetListenDeleate) Analysis(context actor.Context, nets *implement.N
 	}
 
 	var unit *forward.Unit
+	var fpid *actor.PID
 	msgType := proto.MessageType(name)
 	if msgType != nil {
 		if f := nets.GetMethod(msgType); f != nil {
@@ -72,12 +73,13 @@ func (gnld *GNetListenDeleate) Analysis(context actor.Context, nets *implement.N
 		return forward.ErrForwardClientUnverified
 	}
 
-	if elements.ForwardServer.ID == 0 {
+	fpid = elements.SSets.Sreach(constant.ConstForwardServiceName)
+	if fpid == nil {
 		return forward.ErrForwardServiceNotStarted
 	}
 
-	actor.DefaultSchedulerContext.Send(&elements.ForwardServer,
-		&agreement.ForwardEvent{Handle: c.GetID().GetValue(),
+	actor.DefaultSchedulerContext.Send(fpid,
+		&agreement.ForwardServerEvent{Handle: c.GetID().GetValue(),
 			PactunName: name,
 			ServoName:  unit.ServoName,
 			Data:       wrap})
@@ -101,8 +103,13 @@ func (gnld *GNetListenDeleate) UnOnlineNotification(h util.NetHandle) error {
 		return err
 	}
 
-	actor.DefaultSchedulerContext.Send(&elements.ForwardServer,
-		&agreement.ForwardEvent{Handle: h.GetValue(),
+	fpid := elements.SSets.Sreach(constant.ConstForwardServiceName)
+	if fpid == nil {
+		return forward.ErrForwardServiceNotStarted
+	}
+
+	actor.DefaultSchedulerContext.Send(fpid,
+		&agreement.ForwardServerEvent{Handle: h.GetValue(),
 			PactunName: constant.GatewayLogoutPactun,
 			ServoName:  constant.GatewayLogoutName,
 			Data:       wrap})
@@ -119,6 +126,19 @@ func (gnet *GatewayListener) Init() {
 	gnet.NetClients.Init()
 	gnet.NetListenService.Init()
 	//TODO:
+}
+
+//Started xxx
+func (gnet *GatewayListener) Started(context actor.Context, message interface{}) {
+	elements.SSets.Push(gnet.Key(), context.Self())
+	gnet.NetListenService.Started(context, message)
+}
+
+//Shutdown xxx
+func (gnet *GatewayListener) Shutdown() {
+	name := gnet.Key()
+	gnet.NetListenService.Shutdown()
+	elements.SSets.Erase(name)
 }
 
 /*import (
