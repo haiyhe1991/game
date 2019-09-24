@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"time"
 
+	"github.com/yamakiller/magicNet/network"
 	"github.com/yamakiller/magicNet/timer"
 
 	"github.com/gogo/protobuf/proto"
@@ -11,6 +12,7 @@ import (
 	"github.com/yamakiller/game/gateway/constant"
 	"github.com/yamakiller/game/gateway/elements"
 	"github.com/yamakiller/game/gateway/elements/forward"
+	"github.com/yamakiller/game/gateway/elements/servers"
 	"github.com/yamakiller/game/pactum"
 
 	"github.com/yamakiller/magicNet/engine/actor"
@@ -71,13 +73,16 @@ type GatewayConnectDeleate struct {
 }
 
 //Connected Connected proccess
-func (gcd *GatewayConnectDeleate) Connected(context actor.Context, nets *implement.NetConnectService) error {
+func (gcd *GatewayConnectDeleate) Connected(context actor.Context,
+	nets *implement.NetConnectService) error {
 	return nil
 }
 
 //Analysis Packet decomposition
-func (gcd *GatewayConnectDeleate) Analysis(context actor.Context, nets *implement.NetConnectService) error {
-	name, h, wrap, err := agreement.AgentParser(agreement.ConstInParser).Analysis(nets.Handle.GetRecvBuffer())
+func (gcd *GatewayConnectDeleate) Analysis(context actor.Context,
+	nets *implement.NetConnectService) error {
+	name, h, wrap, err := agreement.AgentParser(agreement.ConstInParser).Analysis(nil,
+		nets.Handle.GetRecvBuffer())
 	if err != nil {
 		return err
 	}
@@ -102,7 +107,7 @@ func (gcd *GatewayConnectDeleate) Analysis(context actor.Context, nets *implemen
 
 	actor.DefaultSchedulerContext.Send(fpid,
 		&agreement.ForwardClientEvent{Handle: h,
-			PactunName: name,
+			PactumName: name,
 			Data:       wrap})
 
 end:
@@ -121,12 +126,29 @@ type GatewayConnect struct {
 //Init Initialize connector
 func (gconn *GatewayConnect) Init() {
 	gconn.NetConnectService.Init()
-	gconn.RegisterMethod(&pactum.HandshakeResponse{}, gconn.onNetHandshake)
-	gconn.RegisterMethod(&pactum.GatewayRegisterResponse{}, gconn.onNetRegisterResponse)
-	gconn.RegisterMethod(&agreement.ForwardServerEvent{}, gconn.onForwardServer)
+	gconn.RegisterMethod(&network.NetClose{}, gconn.OnClose)
+	gconn.RegisterMethod(&pactum.HandshakeResponse{},
+		gconn.onNetHandshake)
+	gconn.RegisterMethod(&pactum.GatewayRegisterResponse{},
+		gconn.onNetRegisterResponse)
+	gconn.RegisterMethod(&agreement.ForwardServerEvent{},
+		gconn.onForwardServer)
 }
 
-func (gconn *GatewayConnect) onNetHandshake(context actor.Context, message interface{}) {
+//OnClose Handling connection close events
+func (gconn *GatewayConnect) OnClose(context actor.Context, message interface{}) {
+	group := elements.TLSets.Get(gconn.Target.GetName())
+	if group != nil {
+		//Delete equalizer
+		group.RemoveTarget(gconn.Name())
+	} else {
+		gconn.LogError("%s class equalizer does not exist", gconn.Target.GetName())
+	}
+	gconn.NetConnectService.OnClose(context, message)
+}
+
+func (gconn *GatewayConnect) onNetHandshake(context actor.Context,
+	message interface{}) {
 	//Internal communication does not consider encrypted communication
 	request := pactum.GatewayRegisterRequest{}
 	request.Id = gconn.GatewayID
@@ -134,7 +156,8 @@ func (gconn *GatewayConnect) onNetHandshake(context actor.Context, message inter
 	var err error
 
 	if gconn.Target.GetEtat() != implement.Connecting {
-		gconn.LogError("onNetHandshake: handshake fail: current status %+v,%+v", gconn.Target.GetEtat(), implement.Connecting)
+		gconn.LogError("onNetHandshake: handshake fail: current status %+v,%+v",
+			gconn.Target.GetEtat(), implement.Connecting)
 		return
 	}
 
@@ -156,39 +179,58 @@ unend:
 	gconn.Target.SetEtat(implement.UnConnected)
 }
 
-func (gconn *GatewayConnect) onNetRegisterResponse(context actor.Context, message interface{}) {
+func (gconn *GatewayConnect) onNetRegisterResponse(context actor.Context,
+	message interface{}) {
+
 	response := message.(*ForwardPacket)
-	gconn.LogDebug("onNetRegisterResponse: remote handle:%+v %s", response.H, response.Name)
+	gconn.LogDebug("onNetRegisterResponse: remote handle:%+v %s",
+		response.H, response.Name)
 	responseMsg := pactum.GatewayRegisterResponse{}
 	err := proto.Unmarshal(response.Wrap, &responseMsg)
 	now := timer.Now()
 	if err != nil {
 		gconn.LogError("onNetRegisterResponse: unmarshal fail:%+v", err)
+		gconn.Handle.Close()
 		goto unend
 	}
 
 	if gconn.Target.GetEtat() != implement.Verify {
-		gconn.LogError("onNetRegisterResponse: register fail: current status %+v,%+v", gconn.Target.GetEtat(), implement.Verify)
+		gconn.LogError("onNetRegisterResponse: register fail: current status %+v,%+v",
+			gconn.Target.GetEtat(), implement.Verify)
 		return
 	}
 
 	gconn.Handle.SetAuth(now)
 	gconn.Target.SetEtat(implement.Connected)
-
-	gconn.LogInfo("onNetRegisterResponse: connected address:%s time:%+v success ", gconn.Target.GetAddr(), now)
+	//Register the connection to the loader======================================
+	if group := elements.TLSets.Get(gconn.Target.GetName()); group != nil {
+		group.AddTarget(gconn.Name(),
+			&servers.TargeObject{ID: gconn.Target.(*servers.TargetConnection).GetVirtualID(),
+				Socket: gconn.Handle.Socket()})
+	} else { //registration failed
+		gconn.Handle.Close()
+		gconn.LogError("Registration to the loader failed, %s such loader does not exist",
+			gconn.Target.GetName())
+		goto unend
+	}
+	//===========================================================================
+	gconn.LogInfo("onNetRegisterResponse: connected address:%s time:%+v success ",
+		gconn.Target.GetAddr(), now)
 	return
 unend:
 	gconn.Target.SetEtat(implement.UnConnected)
 }
 
-func (gconn *GatewayConnect) onForwardServer(context actor.Context, message interface{}) {
+func (gconn *GatewayConnect) onForwardServer(context actor.Context,
+	message interface{}) {
 
 	ick := 0
 	var err error
 	request := message.(*agreement.ForwardServerEvent)
 	for {
 		if gconn.IsShutdown() {
-			gconn.LogWarning("Service has been terminated, data is discarded:%s", request.PactumName)
+			gconn.LogWarning("Service has been terminated, data is discarded:%s",
+				request.PactumName)
 			return
 		}
 
@@ -201,7 +243,8 @@ func (gconn *GatewayConnect) onForwardServer(context actor.Context, message inte
 				}
 			} else {
 				if outTime := gconn.Target.IsTimeout(); outTime > 0 {
-					gconn.LogWarning("onForwardServer: AutoConnect TimeOut:%d millisecond", outTime)
+					gconn.LogWarning("onForwardServer: AutoConnect TimeOut:%d millisecond",
+						outTime)
 					gconn.Target.RestTimeout()
 					gconn.Handle.Close()
 				}
@@ -224,7 +267,8 @@ func (gconn *GatewayConnect) onForwardServer(context actor.Context, message inte
 	}
 
 	//Assembling the inner net package
-	fdata := agreement.AgentParser(agreement.ConstInParser).Assemble(1,
+	fdata := agreement.AgentParser(agreement.ConstInParser).Assemble(nil,
+		agreement.ConstPactumVersion,
 		request.Handle,
 		request.PactumName,
 		request.Data,

@@ -43,4 +43,6 @@ var (
 	GatewayConnectForwardInterval int
 	//GatewayConnectForwardAutoTick Automatic reconnection interval
 	GatewayConnectForwardAutoTick int
+	//GatewayConnectLoaderReplicas Connect the load balancer, copy factor, virtual node factor
+	GatewayConnectLoaderReplicas int
 )

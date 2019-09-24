@@ -14,7 +14,8 @@ type ExternalParser struct {
 //------------------------------------------------------------------------------------------
 //  7 Bit Version | 12 Bit data length | 5 Bit AgreementName | AgreementName | data packet |
 //------------------------------------------------------------------------------------------
-func (epr *ExternalParser) Analysis(data *bytes.Buffer) (string, uint64, []byte, error) {
+func (epr *ExternalParser) Analysis(keyPair interface{},
+	data *bytes.Buffer) (string, uint64, []byte, error) {
 
 	if data.Len() < constAgreeHeader {
 		return "", 0, nil, nil
@@ -44,9 +45,14 @@ func (epr *ExternalParser) Analysis(data *bytes.Buffer) (string, uint64, []byte,
 }
 
 // Assemble Assembly Protocol Data
-func (epr *ExternalParser) Assemble(version int32, handle uint64, agreementName string, data []byte, length int32) []byte {
+func (epr *ExternalParser) Assemble(keyPair interface{},
+	version int32,
+	handle uint64,
+	agreementName string,
+	data []byte,
+	length int32) []byte {
+
 	nameLength := int32(len([]rune(agreementName)))
-	//count := constAgreeHeader + nameLength + length
 	buffer := bytes.NewBuffer([]byte{})
 
 	buffer.Write(assembleHeader(version, length, nameLength))

@@ -15,7 +15,8 @@ type InsideParser struct {
 //-----------------------------------------------------------------------------------------------------------
 //  7 Bit Version | 12 Bit data length | 5 Bit AgreementName | 64 Bit Handle | AgreementName | data packet |
 //-----------------------------------------------------------------------------------------------------------
-func (ipr *InsideParser) Analysis(data *bytes.Buffer) (string, uint64, []byte, error) {
+func (ipr *InsideParser) Analysis(keyPair interface{},
+	data *bytes.Buffer) (string, uint64, []byte, error) {
 	if data.Len() < (constAgreeHeader + constAgreeHandle) {
 		return "", 0, nil, nil
 	}
@@ -45,7 +46,13 @@ func (ipr *InsideParser) Analysis(data *bytes.Buffer) (string, uint64, []byte, e
 }
 
 //Assemble Assembly Inside protocol
-func (ipr *InsideParser) Assemble(version int32, handle uint64, agreeName string, data []byte, length int32) []byte {
+func (ipr *InsideParser) Assemble(keyPair interface{},
+	version int32,
+	handle uint64,
+	agreeName string,
+	data []byte,
+	length int32) []byte {
+
 	nameLength := int32(len([]rune(agreeName)))
 	buffer := bytes.NewBuffer([]byte{})
 	handleBuffer := make([]byte, 8)

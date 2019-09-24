@@ -21,8 +21,10 @@ func (gsc *GatewayScirpt) Init() {
 	gsc.handle.GetLuaState().OpenLibs()
 	gsc.handle.AddSreachPath(constant.GatewayLuaScriptPath)
 	//register the registerRouteProto function and set gw
-	gsc.handle.GetLuaState().Register("register_forward", luaRegisterForward)
-	gsc.handle.GetLuaState().Register("register_target_connect", luaRegisterTargetService)
+	gsc.handle.GetLuaState().Register("register_forward",
+		luaRegisterForward)
+	gsc.handle.GetLuaState().Register("register_target_connect",
+		luaRegisterTargetService)
 
 	if _, err := gsc.handle.ExecuteScriptFile(constant.GatewayLuaScriptFile); err != nil {
 		panic(err)
@@ -54,13 +56,18 @@ func luaRegisterForward(L *mlua.State) int {
 
 	protocolType := proto.MessageType(protocolName)
 	if protocolType == nil {
-		logger.Error(0, "Gateway Registration %s forward agreement error ", protocolName)
+		logger.Error(0, "Gateway Registration %s forward agreement error ",
+			protocolName)
 		return 0
 	}
 
-	elements.ForwardAddresses.Register(protocolType, protocolName, serverName, auth)
+	elements.ForwardAddresses.Register(protocolType,
+		protocolName,
+		serverName,
+		auth)
 
-	logger.Debug(0, "Gateway Registration Forward Address %s,%s,%+v", protocolName, serverName, auth)
+	logger.Debug(0, "Gateway Registration Forward Address %s,%s,%+v",
+		protocolName, serverName, auth)
 
 	return 0
 }
@@ -68,7 +75,8 @@ func luaRegisterForward(L *mlua.State) int {
 func luaRegisterTargetService(L *mlua.State) int {
 	argsNum := L.GetTop()
 	if argsNum < 3 {
-		return L.Error("append service connection error need 5-6 parameters[ID,Name,Address,Timeout, outChanMax]")
+		return L.Error("append service connection error need 5-6" +
+			" parameters[ID,Name,Address,Timeout, outChanMax]")
 	}
 	targetID := int32(L.ToCheckInteger(1))
 	targetName := L.ToCheckString(2)
@@ -89,10 +97,19 @@ func luaRegisterTargetService(L *mlua.State) int {
 		OutChanMax: int(targetOutChanMax)})
 
 	if err != nil {
-		logger.Error(0, "Gateway Registration TargetConnection fail error: %+v", err)
+		logger.Error(0, "Gateway Registration TargetConnection fail error: %+v",
+			err)
 	}
 
-	logger.Debug(0, "Gateway Registration TargetConnection ID:%d Name:%s Addr:%s,Timeout:%d milli ,out-chan-max:%d",
+	//Register a set of connected load balancers
+	if v := elements.TLSets.Get(targetName); v != nil {
+		elements.TLSets.Add(targetName,
+			servers.NewLoader(constant.GatewayConnectLoaderReplicas))
+	}
+	//==========================================
+
+	logger.Debug(0, "Gateway Registration TargetConnection ID:%d Name:%s"+
+		" Addr:%s,Timeout:%d milli ,out-chan-max:%d",
 		targetID,
 		targetName,
 		targetAddr,

@@ -6,8 +6,8 @@ import (
 )
 
 const (
-	//ConstArgeeVersion Protocol version number
-	ConstArgeeVersion = 1
+	//ConstPactumVersion Protocol version number
+	ConstPactumVersion = 1
 )
 
 //ForwardServerEvent Forward data to server is event
@@ -21,7 +21,7 @@ type ForwardServerEvent struct {
 //ForwardClientEvent Forward data to client is event
 type ForwardClientEvent struct {
 	Handle     uint64
-	PactunName string
+	PactumName string
 	Data       []byte
 }
 

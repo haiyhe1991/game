@@ -11,6 +11,8 @@ var (
 	ForwardAddresses *forward.Table
 	//TSets Connection configuration status information of the target server
 	TSets *servers.TargetSet
+	//TLSets Service clusters that are not connected to the gateway provide load balancing
+	TLSets *servers.TargetLoadSet
 	//SSets Service set
 	SSets *manager.SSets
 )
@@ -18,9 +20,6 @@ var (
 func init() {
 	ForwardAddresses = forward.NewTable()
 	TSets = servers.NewTargetSet()
+	TLSets = servers.NewLoadSet()
 	SSets = manager.NewSSets()
-	//Clients = clients.NewGClientManager()
-	//Conns = servers.NewManager()
-
-	//preset.SetSingleLimit(constant.ConstPlayerBufferLimit >> 1)
 }

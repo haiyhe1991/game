@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/game/common/agreement"
 	"github.com/yamakiller/game/gateway/constant"
 	"github.com/yamakiller/game/gateway/elements"
@@ -15,6 +16,9 @@ import (
 	"github.com/yamakiller/magicNet/service/implement"
 )
 
+type checkConnectEvent struct {
+}
+
 //GatewayForward Gateway forwarding service
 type GatewayForward struct {
 	service.Service
@@ -22,6 +26,7 @@ type GatewayForward struct {
 	authTicker *time.Ticker
 	authSign   chan bool
 	authWait   sync.WaitGroup
+	isChecking bool
 	isShutdown bool
 }
 
@@ -30,6 +35,7 @@ func (gf *GatewayForward) Init() {
 	gf.Service.Init()
 	gf.RegisterMethod(&actor.Started{}, gf.Started)
 	gf.RegisterMethod(&actor.Stopped{}, gf.Stoped)
+	gf.RegisterMethod(&checkConnectEvent{}, gf.onCheckConnect)
 	gf.RegisterMethod(&agreement.ForwardClientEvent{}, gf.onForwardClient)
 	gf.RegisterMethod(&agreement.ForwardServerEvent{}, gf.onForwardServer)
 }
@@ -75,7 +81,11 @@ func (gf *GatewayForward) Started(context actor.Context, message interface{}) {
 		for {
 			select {
 			case <-t.C:
-				gf.checkConnect()
+				if !gf.isChecking {
+					gf.isChecking = true
+					actor.DefaultSchedulerContext.Send(gf.GetPID(),
+						&checkConnectEvent{})
+				}
 			case stop := <-gf.authSign:
 				if stop {
 					return
@@ -113,12 +123,63 @@ func (gf *GatewayForward) Shutdown() {
 	gf.Service.Shutdown()
 }
 
-func (gf *GatewayForward) checkConnect() {
+func (gf *GatewayForward) restCheckStatus() {
+	gf.isChecking = false
+}
 
+func (gf *GatewayForward) onCheckConnect(context actor.Context, message interface{}) {
+	defer gf.restCheckStatus()
+	for _, v := range gf.conns {
+		//End and exit
+		if gf.isShutdown {
+			return
+		}
+
+		switch v.Target.GetEtat() {
+		case implement.Connected:
+		case implement.Connecting:
+			fallthrough
+		case implement.Verify:
+			if outTm := v.Target.IsTimeout(); outTm > 0 {
+				v.Handle.Close()
+			}
+		case implement.UnConnected:
+			if v.GetPID() != nil {
+				v.Target.SetEtat(implement.Connecting)
+				actor.DefaultSchedulerContext.Send(v.GetPID(),
+					&implement.NetConnectEvent{})
+			}
+		default:
+			gf.LogDebug("Exception non-existent logic")
+		}
+	}
 }
 
 func (gf *GatewayForward) onForwardClient(context actor.Context, message interface{}) {
+	msg := message.(*agreement.ForwardClientEvent)
+	msgType := proto.MessageType(msg.PactumName)
+	if msgType == nil {
+		gf.LogError("The %s protocol is not defined, and the data is discarded depending on the abnormal operation.",
+			msg.PactumName)
+		return
+	}
 
+	adr := elements.ForwardAddresses.Sreach(msgType)
+	if adr == nil || !(adr.ServoName == "client") {
+		gf.LogError("Protocol not registered route or routing address error: pactum name:%s",
+			msg.PactumName)
+		return
+	}
+
+	pid := elements.SSets.Sreach(constant.ConstNetworkServiceName)
+	if pid == nil {
+		gf.LogError("Network Service Department exists")
+		return
+	}
+
+	actor.DefaultSchedulerContext.Send(pid, msg)
+	gf.LogDebug("The send request has been handed over to the network service module: pactum name:%s",
+		msg.PactumName)
 }
 
 func (gf *GatewayForward) onForwardServer(context actor.Context, message interface{}) {
