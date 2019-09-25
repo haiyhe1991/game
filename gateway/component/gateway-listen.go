@@ -92,7 +92,7 @@ func (gnld *GNetListenDeleate) Analysis(context actor.Context,
 	}
 
 	actor.DefaultSchedulerContext.Send(fpid,
-		&agreement.ForwardServerEvent{Handle: c.GetID().GetValue(),
+		&agreement.ForwardServerEvent{Handle: c.GetID(),
 			PactumName: name,
 			ServoName:  unit.ServoName,
 			Data:       wrap})
@@ -102,7 +102,7 @@ end:
 }
 
 //UnOnlineNotification Offline notification
-func (gnld *GNetListenDeleate) UnOnlineNotification(h util.NetHandle) error {
+func (gnld *GNetListenDeleate) UnOnlineNotification(h uint64) error {
 	msgType := proto.MessageType(constant.GatewayLogoutPactum)
 	if msgType == nil {
 		return fmt.Errorf("An error occurred while processing the offline "+
@@ -124,7 +124,7 @@ func (gnld *GNetListenDeleate) UnOnlineNotification(h util.NetHandle) error {
 	}
 
 	actor.DefaultSchedulerContext.Send(fpid,
-		&agreement.ForwardServerEvent{Handle: h.GetValue(),
+		&agreement.ForwardServerEvent{Handle: h,
 			PactumName: constant.GatewayLogoutPactum,
 			ServoName:  constant.GatewayLogoutName,
 			Data:       wrap})
@@ -156,7 +156,7 @@ func (gnet *GatewayListener) onForwardClient(context actor.Context,
 	msg := message.(*agreement.ForwardClientEvent)
 	h := util.NetHandle{}
 	h.SetValue(msg.Handle)
-	c := gnet.NetClients.Grap(&h)
+	c := gnet.NetClients.Grap(h.GetValue())
 	if c == nil {
 		gnet.LogError("Failed to send data, %+v client does not exist", msg.Handle)
 		return

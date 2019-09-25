@@ -7,9 +7,10 @@ import (
 
 //GClient Gateway Connection from the Internet
 type GClient struct {
+	implement.NetClient
+
 	handle util.NetHandle
 	auth   uint64
-	implement.NetClient
 }
 
 //SetID Setting the client ID

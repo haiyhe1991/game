@@ -76,27 +76,32 @@ func (gcm *GClientManager) Association(id int32) {
 }
 
 //Occupy xxxx
-func (gcm *GClientManager) Occupy(c implement.INetClient) (*util.NetHandle, error) {
+func (gcm *GClientManager) Occupy(c implement.INetClient) (uint64, error) {
 	gcm.Lock()
 	defer gcm.Unlock()
 	key, err := gcm.Push(c)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
 	c.SetRef(2)
 	h := c.GetID()
-	h.Generate(gcm.serverid, int32(key), h.GetSocket())
-	gcm.smp[h.GetSocket()] = int32(key)
+	nh := util.NetHandle{}
+	nh.SetValue(h)
+	nh.Generate(gcm.serverid, int32(key), nh.GetSocket())
+	c.SetID(nh.GetValue())
 
-	return h, nil
+	return nh.GetValue(), nil
 }
 
 //Grap xxx
-func (gcm *GClientManager) Grap(h *util.NetHandle) implement.INetClient {
+func (gcm *GClientManager) Grap(h uint64) implement.INetClient {
+	ea := util.NetHandle{}
+	ea.SetValue(h)
+
 	gcm.Lock()
 	defer gcm.Unlock()
-	return gcm.getClient(h.GetHandle())
+	return gcm.getClient(ea.GetHandle())
 }
 
 //GrapSocket xxx
@@ -123,22 +128,24 @@ func (gcm *GClientManager) getClient(key int32) implement.INetClient {
 }
 
 //Erase xxxx
-func (gcm *GClientManager) Erase(h *util.NetHandle) {
+func (gcm *GClientManager) Erase(h uint64) {
 	gcm.Lock()
 	defer gcm.Unlock()
 
-	if h.GetSocket() > 0 {
-		if _, ok := gcm.smp[h.GetSocket()]; ok {
-			delete(gcm.smp, h.GetSocket())
+	ea := util.NetHandle{}
+	ea.SetValue(h)
+	if ea.GetSocket() > 0 {
+		if _, ok := gcm.smp[ea.GetSocket()]; ok {
+			delete(gcm.smp, ea.GetSocket())
 		}
 	}
 
-	c := gcm.Get(uint32(h.GetHandle()))
+	c := gcm.Get(uint32(ea.GetHandle()))
 	if c == nil {
 		return
 	}
 
-	gcm.Remove(uint32(h.GetHandle()))
+	gcm.Remove(uint32(ea.GetHandle()))
 
 	if c.(implement.INetClient).DecRef() <= 0 {
 		gcm.Allocer().Delete(c.(implement.INetClient))
@@ -156,7 +163,7 @@ func (gcm *GClientManager) Release(net implement.INetClient) {
 }
 
 //GetHandles xxx
-func (gcm *GClientManager) GetHandles() []util.NetHandle {
+func (gcm *GClientManager) GetHandles() []uint64 {
 	gcm.Lock()
 	defer gcm.Unlock()
 
@@ -166,9 +173,9 @@ func (gcm *GClientManager) GetHandles() []util.NetHandle {
 	}
 
 	i := 0
-	result := make([]util.NetHandle, len(cs))
+	result := make([]uint64, len(cs))
 	for _, v := range cs {
-		result[i] = *v.(implement.INetClient).GetID()
+		result[i] = v.(implement.INetClient).GetID()
 		i++
 	}
 
