@@ -1,6 +1,9 @@
 package servers
 
-import "github.com/yamakiller/magicNet/st/hash"
+import (
+	"github.com/yamakiller/magicNet/engine/actor"
+	"github.com/yamakiller/magicNet/st/hash"
+)
 
 //NewLoadSet Assign a load set
 func NewLoadSet() *TargetLoadSet {
@@ -15,7 +18,7 @@ func NewLoader(replicas int) *TargetLoader {
 //TargeObject target
 type TargeObject struct {
 	ID     uint32
-	Socket int32
+	Target *actor.PID
 }
 
 //TargetLoadSet Target load set

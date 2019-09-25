@@ -2,6 +2,7 @@ package component
 
 import (
 	"bytes"
+	"math/rand"
 	"strconv"
 	"sync"
 	"time"
@@ -72,6 +73,12 @@ func (gf *GatewayForward) Started(context actor.Context, message interface{}) {
 		gf.conns = append(gf.conns, con.(*GatewayConnect))
 		gf.LogInfo("Start generating %s connectors address:%s complete", name, t.Addr)
 	}
+
+	//auto connect==========================================
+	gf.isChecking = true
+	actor.DefaultSchedulerContext.Send(gf.GetPID(),
+		&checkConnectEvent{})
+	//======================================================
 
 	gf.authWait.Add(1)
 	gf.authTicker = time.NewTicker(time.Duration(constant.GatewayConnectForwardAutoTick) * time.Millisecond)
@@ -183,5 +190,31 @@ func (gf *GatewayForward) onForwardClient(context actor.Context, message interfa
 }
 
 func (gf *GatewayForward) onForwardServer(context actor.Context, message interface{}) {
+	msg := message.(*agreement.ForwardServerEvent)
+	loader := elements.TLSets.Get(msg.ServoName)
+	if loader == nil {
+		gf.LogError("The %s target server was not found"+
+			" and the data was discarded.", msg.ServoName)
+		return
+	}
 
+	ick := 0
+	var to *servers.TargeObject
+	for {
+		to = loader.GetTarget(strconv.Itoa(rand.Intn(10000)))
+		if to != nil {
+			break
+		}
+
+		ick++
+		if ick >= 6 {
+			gf.LogError("[%s]No attempts were made to find"+
+				" available nodes and data was dropped", msg.ServoName)
+			return
+		}
+	}
+
+	actor.DefaultSchedulerContext.Send(to.Target, msg)
+
+	gf.LogDebug("Data send request has been pushed successfully")
 }

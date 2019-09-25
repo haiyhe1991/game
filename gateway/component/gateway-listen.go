@@ -24,11 +24,10 @@ import (
 //NewGatewayListener Create a network listening service
 func NewGatewayListener() *GatewayListener {
 	return &GatewayListener{NetListenService: implement.NetListenService{
-		NetListen:             &net.TCPListen{},
-		NetDeleate:            &GNetListenDeleate{},
-		NetClients:            clients.NewGClientManager(),
-		ClientKeep:            uint64(constant.GatewayConnectKleep),
-		ClientRecvBufferLimit: constant.ConstClientBufferLimit}}
+		NetListen:  &net.TCPListen{},
+		NetDeleate: &GNetListenDeleate{},
+		NetClients: clients.NewGClientManager(),
+		ClientKeep: uint64(constant.GatewayConnectKleep)}}
 }
 
 //GNetListenDeleate network listening service, delegate logic

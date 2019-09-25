@@ -206,7 +206,7 @@ func (gconn *GatewayConnect) onNetRegisterResponse(context actor.Context,
 	if group := elements.TLSets.Get(gconn.Target.GetName()); group != nil {
 		group.AddTarget(gconn.Name(),
 			&servers.TargeObject{ID: gconn.Target.(*servers.TargetConnection).GetVirtualID(),
-				Socket: gconn.Handle.Socket()})
+				Target: gconn.GetPID()})
 	} else { //registration failed
 		gconn.Handle.Close()
 		gconn.LogError("Registration to the loader failed, %s such loader does not exist",
@@ -255,7 +255,8 @@ func (gconn *GatewayConnect) onForwardServer(context actor.Context,
 
 		ick++
 		if ick > gconn.AutoErrRetry {
-			gconn.LogError("OnForwardServer AutoConnect fail, Data is discarded %+v %s %s %d check num:%d",
+			gconn.LogError("OnForwardServer AutoConnect fail, "+
+				"Data is discarded %+v %s %s %d check num:%d",
 				request.Handle,
 				request.PactumName,
 				request.ServoName,

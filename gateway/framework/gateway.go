@@ -31,6 +31,7 @@ type GatewayFrame struct {
 
 	//
 	scriptLua *component.GatewayScirpt
+	forward   *component.GatewayForward
 	netListen *component.GatewayListener
 	//conService *component.ConService
 	//netService *component.OutNetService
@@ -65,15 +66,21 @@ func (gw *GatewayFrame) InitService() error {
 	gw.scriptLua = &component.GatewayScirpt{}
 	gw.scriptLua.Init()
 
-	//gw.conService = component.NewTCPConService()
+	gw.forward = func() *component.GatewayForward {
+		return service.Make(constant.ConstForwardServiceName, func() service.IService {
+			h := &component.GatewayForward{}
+			h.Init()
+			return h
+		}).(*component.GatewayForward)
+	}()
+
 	gw.netListen = func() *component.GatewayListener {
 		return service.Make(constant.ConstNetworkServiceName, func() service.IService {
 
 			h := &component.GatewayListener{NetListenService: implement.NetListenService{NetListen: &net.TCPListen{},
-				NetDeleate:            &component.GNetListenDeleate{},
-				NetClients:            clients.NewGClientManager(),
-				ClientKeep:            uint64(constant.GatewayConnectKleep),
-				ClientRecvBufferLimit: constant.ConstClientBufferLimit}}
+				NetDeleate: &component.GNetListenDeleate{},
+				NetClients: clients.NewGClientManager(),
+				ClientKeep: uint64(constant.GatewayConnectKleep)}}
 
 			h.MaxClient = constant.GatewayMaxConnect
 			h.CCMax = constant.GatewayCCMax
@@ -91,20 +98,20 @@ func (gw *GatewayFrame) InitService() error {
 //CloseService close gateway system
 func (gw *GatewayFrame) CloseService() {
 
+	if gw.forward == nil {
+		gw.forward.Shutdown()
+		gw.forward = nil
+	}
 	if gw.netListen != nil {
 		gw.netListen.Shutdown()
 		gw.netListen = nil
 	}
 
-	/*if gw.conService != nil {
-		gw.conService.Shutdown()
-		gw.conService = nil
-	}*/
-
 	if gw.scriptLua != nil {
 		gw.scriptLua.Shutdown()
 		gw.scriptLua = nil
 	}
+
 }
 
 // VarValue : Command bind
