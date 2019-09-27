@@ -7,6 +7,7 @@ import (
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/network"
 	"github.com/yamakiller/magicNet/service/implement"
+	"github.com/yamakiller/magicNet/service/net"
 )
 
 //InNetListenDeleate Intranet listening delegation method
@@ -42,6 +43,23 @@ func (inld *InNetListenDeleate) UnOnlineNotification(h uint64) error {
 	return nil
 }
 
+//SpawnInNetListen xxx
+func SpawnInNetListen(clients implement.INetClientManager,
+	deleate implement.INetListenDeleate,
+	addr string,
+	ccmax int,
+	max int,
+	keep uint64) InNetListen {
+	return InNetListen{NetListenService: implement.NetListenService{
+		NetListen:  &net.TCPListen{},
+		NetClients: clients,
+		NetDeleate: deleate,
+		Addr:       addr,
+		CCMax:      ccmax,
+		MaxClient:  max,
+		ClientKeep: keep}}
+}
+
 //InNetListen Intranet listening service base class
 type InNetListen struct {
 	implement.NetListenService
@@ -58,6 +76,7 @@ func (inet *InNetListen) Started(context actor.Context,
 	message interface{}) {
 	inet.NetListenService.Started(context, message)
 	inet.RegisterMethod(&network.NetChunk{}, inet.OnRecv)
+	inet.RegisterMethod(&network.NetClose{}, inet.OnClose)
 }
 
 //OnRecv Overloaded OnRecv method
@@ -84,4 +103,28 @@ func (inet *InNetListen) OnRecv(context actor.Context,
 	}
 
 	actor.DefaultSchedulerContext.Send(csrv.GetPID(), wrap)
+}
+
+//OnClose Close connection event
+func (inet *InNetListen) OnClose(context actor.Context, message interface{}) {
+	closer := message.(*network.NetClose)
+	inet.LogDebug("close socket:%d", closer.Handle)
+	c := inet.NetClients.GrapSocket(closer.Handle)
+	if c == nil {
+		inet.LogError("close unfind map-id socket %d", closer.Handle)
+		return
+	}
+
+	defer inet.NetClients.Release(c)
+
+	hClose := c.GetID()
+	hClose |= (uint64(closer.Handle) << 32)
+
+	inet.NetClients.Erase(hClose)
+
+	if err := inet.NetDeleate.UnOnlineNotification(hClose); err != nil {
+		inet.LogDebug("closed client Notification %+v", err)
+	}
+
+	inet.LogDebug("closed client: %+v", hClose)
 }

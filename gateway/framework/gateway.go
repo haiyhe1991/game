@@ -33,13 +33,11 @@ type GatewayFrame struct {
 	scriptLua *component.GatewayScirpt
 	forward   *component.GatewayForward
 	netListen *component.GatewayListener
-	//conService *component.ConService
-	//netService *component.OutNetService
 }
 
 //InitService init gateway system
 func (gw *GatewayFrame) InitService() error {
-	//gw.dsrv = &core.DefaultService{}
+
 	if err := gw.DefaultService.InitService(); err != nil {
 		return err
 	}
@@ -123,13 +121,3 @@ func (gw *GatewayFrame) VarValue() {
 func (gw *GatewayFrame) LineOption() {
 	gw.dcmd.LineOption()
 }
-
-//NewTCPConService Create a connection service
-/*func NewTCPConService() *ConService {
-	return service.Make(constant.ConstConnectServiceName, func() service.IService {
-		handle := &ConService{}
-
-		handle.Init()
-		return handle
-	}).(*ConService)
-}*/

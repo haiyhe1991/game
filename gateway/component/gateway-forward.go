@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/yamakiller/game/common"
 	"github.com/yamakiller/game/common/agreement"
 	"github.com/yamakiller/game/gateway/constant"
 	"github.com/yamakiller/game/gateway/elements"
@@ -61,7 +62,7 @@ func (gf *GatewayForward) Started(context actor.Context, message interface{}) {
 				AutoErrRetry:     constant.GatewayConnectForwardErrMax,
 				AutoErrRetryTime: constant.GatewayConnectForwardInterval,
 				NetConnectService: implement.NetConnectService{
-					Handle: &GatewayHandleConnect{RecvBufferMax: constant.ConstClientBufferLimit,
+					Handle: &GatewayHandleConnect{RecvBufferMax: common.ConstClientBufferLimit,
 						rbuffer: bytes.NewBuffer([]byte{})},
 					Deleate: &GatewayConnectDeleate{},
 					Target:  t}}

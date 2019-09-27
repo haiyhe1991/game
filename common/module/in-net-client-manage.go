@@ -4,7 +4,6 @@ import (
 	"sync"
 
 	"github.com/yamakiller/magicNet/service/implement"
-	"github.com/yamakiller/magicNet/util"
 )
 
 //InNetClientAllocer Intranet client allocator base class
@@ -23,6 +22,11 @@ type InNetClientManage struct {
 	iMaps map[int32]implement.INetClient
 	sMaps map[int32]implement.INetClient
 	sync  sync.Mutex
+}
+
+func (icm *InNetClientManage) Init() {
+	icm.iMaps = make(map[int32]implement.INetClient)
+	icm.sMaps = make(map[int32]implement.INetClient)
 }
 
 func (icm *InNetClientManage) Size() int {
@@ -93,28 +97,40 @@ func (icm *InNetClientManage) GetHandles() []uint64 {
 	return result
 }
 
-func (icm *InNetClientManage) Erase(h *util.NetHandle) {
+//Erase xxx
+func (icm *InNetClientManage) Erase(h uint64) {
 	icm.sync.Lock()
-	defer icm.sync.Unlock()
 
-	c, ok := icm.iMaps[int32(h.GetValue())]
-	if !ok {
-		return
+	hid := int32(h & 0xFFFFFFFF)
+	sid := int32((h >> 32) & 0xFFFFFFFF)
+
+	c, ok := icm.iMaps[hid]
+	if ok {
+		delete(icm.iMaps, hid)
 	}
 
-	delete(icm.iMaps, int32(h.GetValue()))
+	c, ok = icm.sMaps[sid]
+	if ok {
+		delete(icm.sMaps, sid)
+	}
+
 	icm.sz--
 	if c.DecRef() <= 0 {
+		icm.sync.Unlock()
 		icm.Allocer().Delete(c)
+	} else {
+		icm.sync.Unlock()
 	}
 }
 
 //Release xxx
 func (icm *InNetClientManage) Release(net implement.INetClient) {
 	icm.sync.Lock()
-	defer icm.sync.Unlock()
 
 	if net.DecRef() <= 0 {
+		icm.sync.Unlock()
 		icm.Allocer().Delete(net)
+		return
 	}
+	icm.sync.Unlock()
 }

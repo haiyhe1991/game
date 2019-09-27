@@ -8,6 +8,7 @@ import (
 	"github.com/yamakiller/magicNet/st/table"
 	"github.com/yamakiller/magicNet/util"
 
+	"github.com/yamakiller/game/common"
 	"github.com/yamakiller/game/gateway/constant"
 )
 
@@ -16,7 +17,7 @@ var gClientPool = sync.Pool{
 		b := new(GClient)
 		if b.GetRecvBuffer() == nil {
 			b.SetRecvBuffer(bytes.NewBuffer([]byte{}))
-			b.GetRecvBuffer().Grow(constant.ConstClientBufferLimit)
+			b.GetRecvBuffer().Grow(common.ConstClientBufferLimit)
 		} else {
 			b.GetRecvBuffer().Reset()
 		}

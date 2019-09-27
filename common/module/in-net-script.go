@@ -2,7 +2,6 @@ package module
 
 import (
 	"reflect"
-	"unsafe"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/magicNet/script/stack"
@@ -12,22 +11,21 @@ import (
 
 //InNetScript No listening service provides registration operation service
 type InNetScript struct {
-	handle *stack.LuaStack
-	parentLink   reflect.Type
+	handle     *stack.LuaStack
+	parentLink reflect.Type
 }
 
 //Execution Execution script
 func (ins *InNetScript) Execution(fileName string,
-	parent unsafe.Pointer,
-	parentLink reflect.Type) {
+	parent interface{}) {
 
 	ins.handle = stack.NewLuaStack()
-	ins.parentLink = parentLink
+	ins.parentLink = reflect.TypeOf(parent)
 	defer ins.handle.GetLuaState().Close()
 
 	ins.handle.GetLuaState().OpenLibs()
 
-	ins.handle.GetLuaState().PushGoClosure(ins.luaRegisterProtobuf, (uintptr)(parent))
+	ins.handle.GetLuaState().PushGoClosure(ins.luaRegisterProtobuf, reflect.ValueOf(parent).Pointer())
 	ins.handle.GetLuaState().SetGlobal("register_proto_method")
 
 	if _, err := ins.handle.ExecuteScriptFile(fileName); err != nil {
@@ -36,13 +34,13 @@ func (ins *InNetScript) Execution(fileName string,
 }
 
 func (ins *InNetScript) luaRegisterProtobuf(L *mlua.State) int {
-	p  := L.ToLightGoStruct(L.UpvalueIndex(1))
+	p := L.ToLightGoStruct(L.UpvalueIndex(1))
 
 	if p == nil {
 		return L.Error("Upvalue index is empty")
 	}
 
-	c  := reflect.NewAt(ins.parentLink, p)
+	c := reflect.NewAt(ins.parentLink, p)
 	util.Assert(!c.IsNil(), "Lua Client Service is Null")
 
 	argsNum := L.GetTop()
@@ -61,10 +59,10 @@ func (ins *InNetScript) luaRegisterProtobuf(L *mlua.State) int {
 
 	methodRegister := c.MethodByName("RegisterMethod")
 	util.Assert(!methodRegister.IsNil(), "Registration method function does not exist")
-	regObject := c.FieldByName(methodObjectName)
-	util.Assert(!regObject.IsNil(), methodObjectName + " Member not found")
-	methodFunc := regObject.MethodByName(methodName)
-	util.Assert(!methodFunc.IsNil(), methodObjectName + " " +  methodName + " method not found")
+	regObject := FactoryInstance().Get(methodObjectName)
+	util.Assert(!(regObject == nil), methodObjectName+" Member not found")
+	methodFunc := reflect.ValueOf(regObject).MethodByName(methodName)
+	util.Assert(!methodFunc.IsNil(), methodObjectName+" "+methodName+" method not found")
 
 	protokey := reflect.Indirect(reflect.New(protoType.Elem())).Addr().Interface().(proto.Message)
 

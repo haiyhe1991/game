@@ -18,6 +18,7 @@ import (
 //InNetClientChunkEvent Intranet client data message event
 type InNetClientChunkEvent struct {
 	Handle uint64
+	Socket int32
 	Type   reflect.Type
 	Wrap   []byte
 }
@@ -167,8 +168,9 @@ func (inc *InNetClient) analysis(context actor.Context) error {
 	if msgType != nil {
 		if f := inc.GetMethod(msgType); f != nil {
 			f(context, &InNetClientChunkEvent{Handle: h,
-				Type: msgType,
-				Wrap: wrap})
+				Socket: inc.GetSocket(),
+				Type:   msgType,
+				Wrap:   wrap})
 			return implement.ErrAnalysisSuccess
 		}
 	}

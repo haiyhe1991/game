@@ -11,5 +11,5 @@ type SignInListen struct {
 
 //Init Login service object initialization
 func (sil *SignInListen) Init() {
-	sil.NetListenService.Init()
+	sil.InNetListen.Init()
 }
