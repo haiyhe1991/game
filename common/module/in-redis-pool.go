@@ -3,6 +3,7 @@ package module
 //需要进一步扩展
 import (
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/yamakiller/magicNet/library"
@@ -27,6 +28,7 @@ func (rda *redisDBArray) registerDB(host string, db int,
 	idleSec int) error {
 	tmpdb := &library.RedisDB{}
 	if err := tmpdb.Init(host, db, maxIdle, maxActive, idleSec); err != nil {
+		log.Println(err)
 		return err
 	}
 	rda.dbs[db] = tmpdb
@@ -89,8 +91,10 @@ func RedisRegister(host string, db int,
 }
 
 //RedisDo Execute the Redis command
-func RedisDo(db int, commandName string, args ...interface{}) (interface{}, error) {
-	return redisInstance().db(db).Do(commandName)
+func RedisDo(db int, commandName string, args... interface{}) (interface{}, error) {
+//	log.Println(commandName)
+//	log.Println(args...)
+	return redisInstance().db(db).Do(commandName,args...)
 }
 
 //RedisClose Close the entire redis
