@@ -50,7 +50,16 @@ func (sc *SignClientTest) onHandshake(message interface{}) {
 }
 
 func (sc *SignClientTest) onRegisterResponse(messsage interface{}) {
-	//event := message.(*NetEventHandle)
+	evt := messsage.(*NetEventHandle)
+	//msg := evt.Data
+	msg := pactum.GatewayRegisterResponse{}
+	if err := proto.Unmarshal(evt.Data, &msg); err != nil {
+		fmt.Printf("注册回复数据失败:%+v\n", err)
+	}
+
+	fmt.Printf("注册成功:%+v\n", msg)
+
+	//发送数据
 }
 
 func runClient(w *sync.WaitGroup) {
@@ -60,7 +69,7 @@ func runClient(w *sync.WaitGroup) {
 	c.client.RegisterMethod(&pactum.HandshakeResponse{}, c.onHandshake)
 	c.client.RegisterMethod(&pactum.GatewayRegisterResponse{}, c.onRegisterResponse)
 	if err := c.client.Connect("127.0.0.1:7852"); err != nil {
-		fmt.Printf("连接服务器失败：%+v\n", err)
+		fmt.Printf("连接服务器失败:%+v\n", err)
 		return
 	}
 

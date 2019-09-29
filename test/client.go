@@ -16,7 +16,8 @@ const (
 
 //NewClientTest 创建测试客户端
 func NewClientTest() *Client {
-	r := &Client{b: bytes.NewBuffer([]byte{}), out: make(chan []byte, 32), stoped: make(chan bool, 1)}
+	r := &Client{b: bytes.NewBuffer([]byte{}), out: make(chan []byte, 32), stoped: make(chan bool, 1),
+		e: make(map[reflect.Type]NetEventMethod)}
 	r.b.Grow(constBufferLimit)
 	return r
 }
@@ -171,9 +172,9 @@ func (c *Client) write(d []byte) error {
 			if v != nil {
 				msgType := proto.MessageType(name)
 				if msgType != nil {
-					m, success := c.e[msgType]
+					f, success := c.e[msgType]
 					if success {
-						m(&NetEventHandle{Handle: h, Name: name, Data: v})
+						f(&NetEventHandle{Handle: h, Name: name, Data: v})
 					}
 				}
 				continue

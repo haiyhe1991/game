@@ -9,6 +9,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/game/common/agreement"
+	"github.com/yamakiller/game/common/module"
 	"github.com/yamakiller/game/gateway/constant"
 	"github.com/yamakiller/game/gateway/elements"
 	"github.com/yamakiller/game/gateway/elements/forward"
@@ -19,14 +20,6 @@ import (
 	"github.com/yamakiller/magicNet/service/implement"
 	"github.com/yamakiller/magicNet/service/net"
 )
-
-//ForwardPacket Packets from internal network communication
-type ForwardPacket struct {
-	H    uint64
-	S    int32
-	Name string
-	Wrap []byte
-}
 
 //GatewayHandleConnect  Gateway link handle
 type GatewayHandleConnect struct {
@@ -94,8 +87,11 @@ func (gcd *GatewayConnectDeleate) Analysis(context actor.Context,
 	var fpid *actor.PID
 	msgType := proto.MessageType(name)
 	if msgType != nil {
-		if f := nets.GetMethod(msgType); f != nil {
-			f(context, &ForwardPacket{H: h, Name: name, Wrap: wrap})
+		if f := nets.NetMethod.GetType(msgType); f != nil {
+			f(&module.InNeMethodEvent{
+				H:              h,
+				NetMethodEvent: implement.NetMethodEvent{Name: name, Socket: nets.Handle.Socket(), Wrap: wrap},
+			})
 			goto end
 		}
 	}
@@ -127,12 +123,9 @@ type GatewayConnect struct {
 func (gconn *GatewayConnect) Init() {
 	gconn.NetConnectService.Init()
 	gconn.RegisterMethod(&network.NetClose{}, gconn.OnClose)
-	gconn.RegisterMethod(&pactum.HandshakeResponse{},
-		gconn.onNetHandshake)
-	gconn.RegisterMethod(&pactum.GatewayRegisterResponse{},
-		gconn.onNetRegisterResponse)
-	gconn.RegisterMethod(&agreement.ForwardServerEvent{},
-		gconn.onForwardServer)
+	gconn.NetMethod.Register(&pactum.HandshakeResponse{}, gconn.onNetHandshake)
+	gconn.NetMethod.Register(&pactum.GatewayRegisterResponse{}, gconn.onNetRegisterResponse)
+	gconn.RegisterMethod(&agreement.ForwardServerEvent{}, gconn.onForwardServer)
 }
 
 //OnClose Handling connection close events
@@ -145,80 +138,6 @@ func (gconn *GatewayConnect) OnClose(context actor.Context, message interface{})
 		gconn.LogError("%s class equalizer does not exist", gconn.Target.GetName())
 	}
 	gconn.NetConnectService.OnClose(context, message)
-}
-
-func (gconn *GatewayConnect) onNetHandshake(context actor.Context,
-	message interface{}) {
-	//Internal communication does not consider encrypted communication
-	request := pactum.GatewayRegisterRequest{}
-	request.Id = gconn.GatewayID
-	var requestData []byte
-	var err error
-
-	if gconn.Target.GetEtat() != implement.Connecting {
-		gconn.LogError("onNetHandshake: handshake fail: current status %+v,%+v",
-			gconn.Target.GetEtat(), implement.Connecting)
-		return
-	}
-
-	requestData, err = proto.Marshal(&request)
-	if err != nil {
-		gconn.LogError("onNetHandshake: handshake fail:%+v", err)
-		goto unend
-	}
-
-	err = gconn.Handle.Write(requestData, len(requestData))
-	if err != nil {
-		gconn.LogError("onNetHandshake: Register ID fail:%+v", err)
-		goto unend
-	}
-
-	gconn.Target.SetEtat(implement.Verify)
-	return
-unend:
-	gconn.Target.SetEtat(implement.UnConnected)
-}
-
-func (gconn *GatewayConnect) onNetRegisterResponse(context actor.Context,
-	message interface{}) {
-
-	response := message.(*ForwardPacket)
-	gconn.LogDebug("onNetRegisterResponse: remote handle:%+v %s",
-		response.H, response.Name)
-	responseMsg := pactum.GatewayRegisterResponse{}
-	err := proto.Unmarshal(response.Wrap, &responseMsg)
-	now := timer.Now()
-	if err != nil {
-		gconn.LogError("onNetRegisterResponse: unmarshal fail:%+v", err)
-		gconn.Handle.Close()
-		goto unend
-	}
-
-	if gconn.Target.GetEtat() != implement.Verify {
-		gconn.LogError("onNetRegisterResponse: register fail: current status %+v,%+v",
-			gconn.Target.GetEtat(), implement.Verify)
-		return
-	}
-
-	gconn.Handle.SetAuth(now)
-	gconn.Target.SetEtat(implement.Connected)
-	//Register the connection to the loader======================================
-	if group := elements.TLSets.Get(gconn.Target.GetName()); group != nil {
-		group.AddTarget(gconn.Name(),
-			&servers.TargeObject{ID: gconn.Target.(*servers.TargetConnection).GetVirtualID(),
-				Target: gconn.GetPID()})
-	} else { //registration failed
-		gconn.Handle.Close()
-		gconn.LogError("Registration to the loader failed, %s such loader does not exist",
-			gconn.Target.GetName())
-		goto unend
-	}
-	//===========================================================================
-	gconn.LogInfo("onNetRegisterResponse: connected address:%s time:%+v success ",
-		gconn.Target.GetAddr(), now)
-	return
-unend:
-	gconn.Target.SetEtat(implement.UnConnected)
 }
 
 func (gconn *GatewayConnect) onForwardServer(context actor.Context,
@@ -285,4 +204,75 @@ func (gconn *GatewayConnect) onForwardServer(context actor.Context,
 		return
 	}
 	gconn.LogDebug("OnForwardServer Send %s success", request.PactumName)
+}
+
+func (gconn *GatewayConnect) onNetHandshake(event implement.INetMethodEvent) {
+	//Internal communication does not consider encrypted communication
+	request := pactum.GatewayRegisterRequest{}
+	request.Id = gconn.GatewayID
+	var requestData []byte
+	var err error
+
+	if gconn.Target.GetEtat() != implement.Connecting {
+		gconn.LogError("onNetHandshake: handshake fail: current status %+v,%+v",
+			gconn.Target.GetEtat(), implement.Connecting)
+		return
+	}
+
+	requestData, err = proto.Marshal(&request)
+	if err != nil {
+		gconn.LogError("onNetHandshake: handshake fail:%+v", err)
+		goto unend
+	}
+
+	err = gconn.Handle.Write(requestData, len(requestData))
+	if err != nil {
+		gconn.LogError("onNetHandshake: Register ID fail:%+v", err)
+		goto unend
+	}
+
+	gconn.Target.SetEtat(implement.Verify)
+	return
+unend:
+	gconn.Target.SetEtat(implement.UnConnected)
+}
+
+func (gconn *GatewayConnect) onNetRegisterResponse(event implement.INetMethodEvent) {
+	response := event.(*module.InNetMethodEvent)
+	gconn.LogDebug("onNetRegisterResponse: remote handle:%+v %s",
+		response.H, response.Name)
+	responseMsg := pactum.GatewayRegisterResponse{}
+	err := proto.Unmarshal(response.Wrap, &responseMsg)
+	now := timer.Now()
+	if err != nil {
+		gconn.LogError("onNetRegisterResponse: unmarshal fail:%+v", err)
+		gconn.Handle.Close()
+		goto unend
+	}
+
+	if gconn.Target.GetEtat() != implement.Verify {
+		gconn.LogError("onNetRegisterResponse: register fail: current status %+v,%+v",
+			gconn.Target.GetEtat(), implement.Verify)
+		return
+	}
+
+	gconn.Handle.SetAuth(now)
+	gconn.Target.SetEtat(implement.Connected)
+	//Register the connection to the loader======================================
+	if group := elements.TLSets.Get(gconn.Target.GetName()); group != nil {
+		group.AddTarget(gconn.Name(),
+			&servers.TargeObject{ID: gconn.Target.(*servers.TargetConnection).GetVirtualID(),
+				Target: gconn.GetPID()})
+	} else { //registration failed
+		gconn.Handle.Close()
+		gconn.LogError("Registration to the loader failed, %s such loader does not exist",
+			gconn.Target.GetName())
+		goto unend
+	}
+	//===========================================================================
+	gconn.LogInfo("onNetRegisterResponse: connected address:%s time:%+v success ",
+		gconn.Target.GetAddr(), now)
+	return
+unend:
+	gconn.Target.SetEtat(implement.UnConnected)
 }

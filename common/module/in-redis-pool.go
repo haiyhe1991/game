@@ -91,10 +91,8 @@ func RedisRegister(host string, db int,
 }
 
 //RedisDo Execute the Redis command
-func RedisDo(db int, commandName string, args... interface{}) (interface{}, error) {
-//	log.Println(commandName)
-//	log.Println(args...)
-	return redisInstance().db(db).Do(commandName,args...)
+func RedisDo(db int, commandName string, args ...interface{}) (interface{}, error) {
+	return redisInstance().db(db).Do(commandName, args...)
 }
 
 //RedisClose Close the entire redis

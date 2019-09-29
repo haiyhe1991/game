@@ -1,12 +1,12 @@
 package logic
 
-import "github.com/yamakiller/magicNet/engine/actor"
+import "github.com/yamakiller/magicNet/service/implement"
 
 //SignOutProc Log out of the logical processor
 type SignOutProc struct {
 }
 
 //OnProccess Processing logic
-func (sop *SignOutProc) OnProccess(context actor.Context, message interface{}) {
+func (sop *SignOutProc) OnProccess(event implement.INetMethodEvent) {
 
 }

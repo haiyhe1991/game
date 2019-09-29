@@ -48,7 +48,7 @@ func (sif *SignInFrame) InitService() error {
 	sif.keep = uint64(util.GetEnvInt64(signInEnv, "client-keep", 1000))
 	component.SignInStartupScirpt = util.GetEnvString(signInEnv,
 		"client-startup-script-file",
-		"./scirpt/sign-in-client-register.lua")
+		"./script/sign-in-client-register.lua")
 
 	/*if err := module.ReadisEnvAnalysis(signInEnv); err != nil {
 		return err

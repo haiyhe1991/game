@@ -35,7 +35,7 @@ type SignInAllocer struct {
 func (sia *SignInAllocer) New() implement.INetClient {
 	newSerial := atomic.AddUint32(&signInClientSerial, 1)
 	r := service.Make(constSignInClientName+strconv.Itoa(int(newSerial)), func() service.IService {
-		h := &SignInClient{}
+		h := &SignInClient{InNetClient: module.SpawnInNetClient()}
 		if h.GetRecvBuffer() == nil {
 			h.SetRecvBuffer(bytes.NewBuffer([]byte{}))
 			h.GetRecvBuffer().Grow(common.ConstInClientBufferLimit)
@@ -65,6 +65,11 @@ type SignInClient struct {
 //Init Initialize the login client service object
 func (sic *SignInClient) Init() {
 	sic.InNetClient.Init()
+	sic.Dispatch = sic.onDispatch
 	script := module.InNetScript{}
-	script.Execution(SignInStartupScirpt, sic)
+	script.Execution(SignInStartupScirpt, &sic.InNetClient.NetMethod)
+}
+
+func (sic *SignInClient) onDispatch(f implement.NetMethodFun, event *module.InNetMethodClientEvent) {
+	f(event)
 }

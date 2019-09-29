@@ -15,18 +15,20 @@ import (
 	"github.com/yamakiller/magicNet/util"
 )
 
-//InNetClientChunkEvent Intranet client data message event
-type InNetClientChunkEvent struct {
-	Handle uint64
-	Socket int32
-	Type   reflect.Type
-	Wrap   []byte
+//Dispatcher Event distributor
+type Dispatcher func(f implement.NetMethodFun, event *InNetMethodClientEvent)
+
+//SpawnInNetClient  Produce an intranet client object
+func SpawnInNetClient() InNetClient {
+	return InNetClient{NetMethod: implement.SpawnMethodDispatch()}
 }
 
 //InNetClient Intranet client base class
 type InNetClient struct {
 	implement.NetClient
 	service.Service
+	NetMethod implement.NetMethodDispatch
+	Dispatch  Dispatcher
 
 	parent *InNetClientManage
 	handle util.NetHandle
@@ -37,7 +39,7 @@ type InNetClient struct {
 func (inc *InNetClient) Init() {
 	inc.Service.Init()
 	inc.RegisterMethod(&network.NetChunk{}, inc.OnRecv)
-	inc.RegisterMethod(&pactum.GatewayRegisterRequest{}, inc.onGatewayRegister)
+	inc.NetMethod.Register(&pactum.GatewayRegisterRequest{}, inc.onGatewayRegister)
 }
 
 //SetID Setting the client ID
@@ -166,11 +168,19 @@ func (inc *InNetClient) analysis(context actor.Context) error {
 
 	msgType := proto.MessageType(name)
 	if msgType != nil {
-		if f := inc.GetMethod(msgType); f != nil {
-			f(context, &InNetClientChunkEvent{Handle: h,
-				Socket: inc.GetSocket(),
-				Type:   msgType,
-				Wrap:   wrap})
+		if f := inc.NetMethod.GetType(msgType); f == nil {
+			inc.Dispatch(f, &InNetMethodClientEvent{
+				Context:   context,
+				ProtoType: msgType,
+				InNetMethodEvent: InNetMethodEvent{
+					H: h,
+					NetMethodEvent: implement.NetMethodEvent{
+						Name:   name,
+						Socket: inc.GetSocket(),
+						Wrap:   wrap,
+					},
+				},
+			})
 			return implement.ErrAnalysisSuccess
 		}
 	}
@@ -189,9 +199,9 @@ func (inc *InNetClient) Decode(msgType reflect.Type, data []byte) (interface{}, 
 	return wrap, nil
 }
 
-func (inc *InNetClient) onGatewayRegister(context actor.Context, message interface{}) {
-	event := message.(*InNetClientChunkEvent)
-	iwrap, err := inc.Decode(event.Type, event.Wrap)
+func (inc *InNetClient) onGatewayRegister(event implement.INetMethodEvent) {
+	request := event.(*InNetMethodClientEvent)
+	iwrap, err := inc.Decode(request.ProtoType, request.Wrap)
 	if err != nil {
 		inc.LogError("Decoding exception will close the connection")
 		network.OperClose(inc.GetSocket())
@@ -207,7 +217,12 @@ func (inc *InNetClient) onGatewayRegister(context actor.Context, message interfa
 	}
 
 	inc.SetID(uint64(wrap.GetId()))
-	inc.parent.Register(inc.GetSocket(), wrap.GetId())
+	oldClient := inc.parent.Register(inc.GetSocket(), wrap.GetId())
+	if oldClient != nil {
+		network.OperClose(oldClient.GetSocket())
+		inc.parent.Release(oldClient)
+		inc.LogDebug("Old Gateway connection exists, need to kick off, old connection")
+	}
 
 	//Reply packet
 	replyData, err := proto.Marshal(&pactum.GatewayRegisterResponse{Code: 0, Message: "Success"})
@@ -219,8 +234,12 @@ func (inc *InNetClient) onGatewayRegister(context actor.Context, message interfa
 
 	agreement.AgentParser(agreement.ConstInParser).Assemble(inc.GetKeyPair(),
 		agreement.ConstPactumVersion,
-		event.Handle,
-		"pactum.GatewayRegisterResponse", replyData, int32(len(replyData)))
+		request.H,
+		"pactum.GatewayRegisterResponse",
+		replyData,
+		int32(len(replyData)))
+
+	inc.LogDebug("Gateway %d Register Complete", wrap.GetId())
 }
 
 //Shutdown Terminate this client service

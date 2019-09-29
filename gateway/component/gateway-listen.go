@@ -27,6 +27,7 @@ func NewGatewayListener() *GatewayListener {
 		NetListen:  &net.TCPListen{},
 		NetDeleate: &GNetListenDeleate{},
 		NetClients: clients.NewGClientManager(),
+		NetMethod:  implement.SpawnMethodDispatch(),
 		ClientKeep: uint64(constant.GatewayConnectKleep)}}
 }
 
@@ -71,8 +72,12 @@ func (gnld *GNetListenDeleate) Analysis(context actor.Context,
 	var fpid *actor.PID
 	msgType := proto.MessageType(name)
 	if msgType != nil {
-		if f := nets.GetMethod(msgType); f != nil {
-			f(context, wrap)
+		if f := nets.NetMethod.GetType(msgType); f != nil {
+			f(implement.NetMethodEvent{
+				Name:   name,
+				Socket: c.GetSocket(),
+				Wrap:   wrap,
+			})
 			goto end
 		}
 	}

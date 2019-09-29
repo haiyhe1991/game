@@ -1,18 +1,22 @@
 package module
 
 import (
+	"fmt"
 	"reflect"
+	"unsafe"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/magicNet/script/stack"
+	"github.com/yamakiller/magicNet/service/implement"
 	"github.com/yamakiller/magicNet/util"
 	"github.com/yamakiller/mgolua/mlua"
 )
 
 //InNetScript No listening service provides registration operation service
 type InNetScript struct {
-	handle     *stack.LuaStack
-	parentLink reflect.Type
+	handle *stack.LuaStack
+	parent interface{}
+	//parentLink reflect.Type
 }
 
 //Execution Execution script
@@ -20,28 +24,30 @@ func (ins *InNetScript) Execution(fileName string,
 	parent interface{}) {
 
 	ins.handle = stack.NewLuaStack()
-	ins.parentLink = reflect.TypeOf(parent)
-	defer ins.handle.GetLuaState().Close()
+	ins.parent = parent
 
-	ins.handle.GetLuaState().OpenLibs()
+	//ins.parentLink = reflect.TypeOf(parent)
+	defer ins.handle.Shutdown()
 
-	ins.handle.GetLuaState().PushGoClosure(ins.luaRegisterProtobuf, reflect.ValueOf(parent).Pointer())
-	ins.handle.GetLuaState().SetGlobal("register_proto_method")
+	ins.handle.OpenLibs()
+	ins.handle.Register(luaRegisterProtobuf, "register_proto_method",
+		uintptr(unsafe.Pointer(ins)))
 
 	if _, err := ins.handle.ExecuteScriptFile(fileName); err != nil {
 		panic(err)
 	}
 }
 
-func (ins *InNetScript) luaRegisterProtobuf(L *mlua.State) int {
+func luaRegisterProtobuf(L *mlua.State) int {
 	p := L.ToLightGoStruct(L.UpvalueIndex(1))
-
 	if p == nil {
 		return L.Error("Upvalue index is empty")
 	}
 
-	c := reflect.NewAt(ins.parentLink, p)
-	util.Assert(!c.IsNil(), "Lua Client Service is Null")
+	scriptH := (*InNetScript)(p)
+
+	fmt.Println(reflect.TypeOf(scriptH.parent))
+	pointer := scriptH.parent.(*implement.NetMethodDispatch)
 
 	argsNum := L.GetTop()
 	if argsNum < 3 {
@@ -57,19 +63,12 @@ func (ins *InNetScript) luaRegisterProtobuf(L *mlua.State) int {
 		return L.Error("The %s protocol does not exist.", protoName)
 	}
 
-	methodRegister := c.MethodByName("RegisterMethod")
-	util.Assert(!methodRegister.IsNil(), "Registration method function does not exist")
 	regObject := FactoryInstance().Get(methodObjectName)
 	util.Assert(!(regObject == nil), methodObjectName+" Member not found")
 	methodFunc := reflect.ValueOf(regObject).MethodByName(methodName)
-	util.Assert(!methodFunc.IsNil(), methodObjectName+" "+methodName+" method not found")
+	util.Assert(methodFunc.IsValid(), methodObjectName+" "+methodName+" method not found")
 
-	protokey := reflect.Indirect(reflect.New(protoType.Elem())).Addr().Interface().(proto.Message)
-
-	params := make([]reflect.Value, 2)
-	params[0] = reflect.ValueOf(protokey)
-	params[1] = methodFunc
-	methodRegister.Call(params)
+	pointer.RegisterType(protoType, methodFunc.Interface().(func(event implement.INetMethodEvent)))
 
 	return 0
 }

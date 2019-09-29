@@ -1,6 +1,8 @@
 package module
 
 import (
+	"time"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/game/common/agreement"
 	"github.com/yamakiller/game/pactum"
@@ -69,14 +71,44 @@ type InNetListen struct {
 func (inet *InNetListen) Init() {
 	inet.NetClients.Init()
 	inet.NetListenService.Init()
-}
-
-//Started Re-register the OnRecv method
-func (inet *InNetListen) Started(context actor.Context,
-	message interface{}) {
-	inet.NetListenService.Started(context, message)
+	inet.RegisterMethod(&actor.Stopped{}, inet.Stoped)
 	inet.RegisterMethod(&network.NetChunk{}, inet.OnRecv)
 	inet.RegisterMethod(&network.NetClose{}, inet.OnClose)
+}
+
+//Stoped Turn off network monitoring service
+func (inet *InNetListen) Stoped(context actor.Context, message interface{}) {
+	inet.LogInfo("Service Stoping %s", inet.Addr)
+	hls := inet.NetClients.GetHandles()
+	if hls != nil && len(hls) > 0 {
+		for inet.NetClients.Size() > 0 {
+			ick := 0
+			for i := 0; i < len(hls); i++ {
+				c := inet.NetClients.GrapSocket(int32(hls[i]))
+				if c == nil {
+					continue
+				}
+				sck := c.GetSocket()
+				inet.NetClients.Release(c)
+				network.OperClose(sck)
+			}
+
+			for {
+				time.Sleep(time.Duration(500) * time.Microsecond)
+				if inet.NetClients.Size() <= 0 {
+					break
+				}
+
+				inet.LogInfo("Service The remaining %d connections need to be closed", inet.NetClients.Size())
+				ick++
+				if ick > 6 {
+					break
+				}
+			}
+		}
+	}
+	inet.NetListen.Close()
+	inet.LogInfo("Service Stoped")
 }
 
 //OnRecv Overloaded OnRecv method

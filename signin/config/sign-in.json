@@ -42,7 +42,7 @@
      "max" : 1024,
      "chan-max" : 1024,
      "client-keep" : 60000,
-     "client-startup-script-file" : "./scirpt/sign-in-client-register.lua",
+     "client-startup-script-file" : "./script/sign-in-client-register.lua",
      "redis" :[
      {
         "host": "",
