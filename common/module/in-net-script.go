@@ -1,7 +1,6 @@
 package module
 
 import (
-	"fmt"
 	"reflect"
 	"unsafe"
 
@@ -45,8 +44,6 @@ func luaRegisterProtobuf(L *mlua.State) int {
 	}
 
 	scriptH := (*InNetScript)(p)
-
-	fmt.Println(reflect.TypeOf(scriptH.parent))
 	pointer := scriptH.parent.(*implement.NetMethodDispatch)
 
 	argsNum := L.GetTop()
