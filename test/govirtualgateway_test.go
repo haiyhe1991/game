@@ -3,8 +3,10 @@ package test
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -15,6 +17,7 @@ import (
 
 type SignClientTest struct {
 	ID     int32
+	Auth   bool
 	client *Client
 }
 
@@ -23,6 +26,7 @@ func (sc *SignClientTest) Analy(b *bytes.Buffer) (string, uint64, []byte, error)
 }
 
 func (sc *SignClientTest) onHandshake(message interface{}) {
+
 	event := message.(*NetEventHandle)
 
 	wrap := pactum.HandshakeResponse{}
@@ -57,14 +61,37 @@ func (sc *SignClientTest) onRegisterResponse(messsage interface{}) {
 		fmt.Printf("注册回复数据失败:%+v\n", err)
 	}
 
+	sc.Auth = true
+
 	fmt.Printf("注册成功:%+v\n", msg)
 
-	//发送数据
 }
 
-func runClient(w *sync.WaitGroup) {
+func (sc *SignClientTest) onSendSignInRequest() {
+	reqWrap := pactum.LoginRequest{}
+	reqWrap.Account = "test_" + strconv.Itoa(int(sc.ID))
+	reqWrap.Password = reqWrap.Account
+	reqWrap.Origin = "google"
+
+	h := util.NetHandle{}
+	h.Generate(sc.ID, 123, 456)
+
+	reqWrapData, _ := proto.Marshal(&reqWrap)
+
+	reqWrapData = agreement.AgentParser(agreement.ConstInParser).Assemble(nil,
+		1,
+		h.GetValue(),
+		"pactum.LoginRequest",
+		reqWrapData,
+		int32(len(reqWrapData)))
+
+	sc.client.Write(reqWrapData)
+}
+
+func runClient(w *sync.WaitGroup, serID int32) {
 	defer w.Done()
 	c := &SignClientTest{client: NewClientTest()}
+	c.ID = serID
 	c.client.Analysis = c.Analy
 	c.client.RegisterMethod(&pactum.HandshakeResponse{}, c.onHandshake)
 	c.client.RegisterMethod(&pactum.GatewayRegisterResponse{}, c.onRegisterResponse)
@@ -73,9 +100,20 @@ func runClient(w *sync.WaitGroup) {
 		return
 	}
 
-	fmt.Printf("连接服务器成功\n")
-	w.Wait()
-	fmt.Printf("退出连接\n")
+	ick := 0
+	for {
+		if c.Auth {
+			c.onSendSignInRequest()
+			ick++
+			if ick > 100 {
+				break
+			}
+		}
+		time.Sleep(time.Duration(100) * time.Millisecond)
+	}
+
+	c.client.Shutdown()
+	c.client.Wait()
 }
 
 func Test_VirtaulGateway(t *testing.T) {
@@ -83,7 +121,7 @@ func Test_VirtaulGateway(t *testing.T) {
 	var w sync.WaitGroup
 	w.Add(clientNum)
 	for icon := 0; icon < clientNum; icon++ {
-		go runClient(&w)
+		go runClient(&w, int32(clientNum+100))
 	}
 
 	w.Wait()

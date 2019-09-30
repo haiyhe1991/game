@@ -16,9 +16,7 @@ const (
 )
 
 var (
-	//SignInStartupScirpt Start script file
-	SignInStartupScirpt = "" //
-	signInClientSerial  = uint32(1)
+	signInClientSerial = uint32(1)
 )
 
 //NewSignInManager xxx
@@ -66,10 +64,14 @@ type SignInClient struct {
 func (sic *SignInClient) Init() {
 	sic.InNetClient.Init()
 	sic.Dispatch = sic.onDispatch
-	script := module.InNetScript{}
-	script.Execution(SignInStartupScirpt, &sic.InNetClient.NetMethod)
 }
 
-func (sic *SignInClient) onDispatch(f implement.NetMethodFun, event *module.InNetMethodClientEvent) {
+func (sic *SignInClient) onDispatch(event *module.InNetMethodClientEvent) {
+	f := module.GetLogicMethod(event.Name, module.LogicInstance())
+	if f == nil {
+		sic.LogError("Agreement %s is not registered", event.Name)
+		return
+	}
+
 	f(event)
 }

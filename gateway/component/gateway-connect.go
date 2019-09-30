@@ -88,7 +88,7 @@ func (gcd *GatewayConnectDeleate) Analysis(context actor.Context,
 	msgType := proto.MessageType(name)
 	if msgType != nil {
 		if f := nets.NetMethod.GetType(msgType); f != nil {
-			f(&module.InNeMethodEvent{
+			f(&module.InNetMethodEvent{
 				H:              h,
 				NetMethodEvent: implement.NetMethodEvent{Name: name, Socket: nets.Handle.Socket(), Wrap: wrap},
 			})

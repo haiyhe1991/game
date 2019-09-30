@@ -36,7 +36,7 @@ type GatewayForward struct {
 func (gf *GatewayForward) Init() {
 	gf.Service.Init()
 	gf.RegisterMethod(&actor.Started{}, gf.Started)
-	gf.RegisterMethod(&actor.Stopped{}, gf.Stoped)
+	gf.RegisterMethod(&actor.Stopping{}, gf.Stopping)
 	gf.RegisterMethod(&checkConnectEvent{}, gf.onCheckConnect)
 	gf.RegisterMethod(&agreement.ForwardClientEvent{}, gf.onForwardClient)
 	gf.RegisterMethod(&agreement.ForwardServerEvent{}, gf.onForwardServer)
@@ -107,8 +107,8 @@ end:
 	gf.Service.Started(context, message)
 }
 
-//Stoped Stop forwarding service
-func (gf *GatewayForward) Stoped(context actor.Context, message interface{}) {
+//Stopping Stop forwarding service
+func (gf *GatewayForward) Stopping(context actor.Context, message interface{}) {
 	n := len(gf.conns)
 	gf.LogInfo("Service Stopping [connecting:%d]", n)
 	for _, v := range gf.conns {

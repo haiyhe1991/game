@@ -171,6 +171,7 @@ func (c *Client) write(d []byte) error {
 
 			if v != nil {
 				msgType := proto.MessageType(name)
+				fmt.Println(msgType)
 				if msgType != nil {
 					f, success := c.e[msgType]
 					if success {

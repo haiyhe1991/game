@@ -30,6 +30,7 @@ func (ipr *InsideParser) Analysis(keyPair interface{},
 		data.UnreadByte()
 		data.UnreadByte()
 		data.UnreadByte()
+
 		return "", 0, nil, nil
 	}
 

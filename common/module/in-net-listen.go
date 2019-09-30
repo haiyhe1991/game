@@ -8,6 +8,7 @@ import (
 	"github.com/yamakiller/game/pactum"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/network"
+	"github.com/yamakiller/magicNet/service"
 	"github.com/yamakiller/magicNet/service/implement"
 	"github.com/yamakiller/magicNet/service/net"
 )
@@ -18,11 +19,12 @@ type InNetListenDeleate struct {
 
 //Handshake Intranet listening service delegation base interface
 func (inld *InNetListenDeleate) Handshake(c implement.INetClient) error {
-	shake, _ := proto.Marshal(&pactum.HandshakeResponse{Key: ""})
+
+	shake, _ := proto.Marshal(&pactum.HandshakeResponse{Key: "1"})
 	shake = agreement.AgentParser(agreement.ConstInParser).Assemble(nil,
 		agreement.ConstPactumVersion,
 		uint64(c.GetSocket()),
-		"proto.HandshakeResponse",
+		"pactum.HandshakeResponse",
 		shake,
 		int32(len(shake)))
 
@@ -122,8 +124,9 @@ func (inet *InNetListen) OnRecv(context actor.Context,
 		inet.LogError("OnRecv: No target [%d] client service was found", wrap.Handle)
 		return
 	}
+	defer inet.NetClients.Release(c)
 
-	csrv, conv := c.(*InNetClient)
+	csrv, conv := c.(service.IService)
 	if !conv {
 		inet.LogError("OnRecv: Failed to convert to service object does not work properly")
 		return

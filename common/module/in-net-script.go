@@ -15,7 +15,6 @@ import (
 type InNetScript struct {
 	handle *stack.LuaStack
 	parent interface{}
-	//parentLink reflect.Type
 }
 
 //Execution Execution script
@@ -25,7 +24,6 @@ func (ins *InNetScript) Execution(fileName string,
 	ins.handle = stack.NewLuaStack()
 	ins.parent = parent
 
-	//ins.parentLink = reflect.TypeOf(parent)
 	defer ins.handle.Shutdown()
 
 	ins.handle.OpenLibs()
@@ -63,7 +61,7 @@ func luaRegisterProtobuf(L *mlua.State) int {
 	regObject := FactoryInstance().Get(methodObjectName)
 	util.Assert(!(regObject == nil), methodObjectName+" Member not found")
 	methodFunc := reflect.ValueOf(regObject).MethodByName(methodName)
-	util.Assert(methodFunc.IsValid(), methodObjectName+" "+methodName+" method not found")
+	util.Assert(methodFunc.IsValid(), methodObjectName+"."+methodName+" method not found")
 
 	pointer.RegisterType(protoType, methodFunc.Interface().(func(event implement.INetMethodEvent)))
 

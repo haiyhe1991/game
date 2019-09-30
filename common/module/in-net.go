@@ -1,8 +1,6 @@
 package module
 
 import (
-	"reflect"
-
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/service/implement"
 )
@@ -15,7 +13,6 @@ type InNetMethodEvent struct {
 
 //InNetMethodClientEvent 内网客户端数据包事件
 type InNetMethodClientEvent struct {
-	Context   actor.Context
-	ProtoType reflect.Type
+	Context actor.Context
 	InNetMethodEvent
 }

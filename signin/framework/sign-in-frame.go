@@ -27,6 +27,8 @@ type SignInFrame struct {
 	ccmax int
 	keep  uint64
 
+	startupScript string
+
 	snetListen *component.SignInListen
 }
 
@@ -46,9 +48,16 @@ func (sif *SignInFrame) InitService() error {
 	sif.max = util.GetEnvInt(signInEnv, "max", 1024)
 	sif.ccmax = util.GetEnvInt(signInEnv, "chan-max", 1024)
 	sif.keep = uint64(util.GetEnvInt64(signInEnv, "client-keep", 1000))
-	component.SignInStartupScirpt = util.GetEnvString(signInEnv,
+	sif.startupScript = util.GetEnvString(signInEnv,
 		"client-startup-script-file",
 		"./script/sign-in-client-register.lua")
+
+	//Initialize the client connection repository
+	module.NewWarehouse(component.NewSignInManager())
+
+	//register net event
+	scirpt := module.InNetScript{}
+	scirpt.Execution(sif.startupScript, module.LogicInstance())
 
 	/*if err := module.ReadisEnvAnalysis(signInEnv); err != nil {
 		return err
@@ -57,7 +66,7 @@ func (sif *SignInFrame) InitService() error {
 	sif.snetListen = func() *component.SignInListen {
 		return service.Make(global.ConstNetworkServiceName, func() service.IService {
 			h := &component.SignInListen{InNetListen: module.SpawnInNetListen(
-				component.NewSignInManager(),
+				module.GetWarehouse(),
 				&module.InNetListenDeleate{},
 				sif.addr,
 				sif.ccmax,

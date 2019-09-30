@@ -43,10 +43,10 @@ func SetSingleLimit(singleLimit int) {
 
 func getAgreementHeader(data *bytes.Buffer) uint32 {
 	headByte := make([]byte, 4)
-	headByte[0] = 0
+	headByte[0], _ = data.ReadByte()
 	headByte[1], _ = data.ReadByte()
 	headByte[2], _ = data.ReadByte()
-	headByte[3], _ = data.ReadByte()
+	headByte[3] = 0
 
 	head := binary.BigEndian.Uint32(headByte)
 	return head
@@ -68,5 +68,6 @@ func assembleHeader(version int32, dataLength int32, nameLength int32) []byte {
 
 	head := make([]byte, 4)
 	binary.BigEndian.PutUint32(head, headInt)
-	return head[1:]
+
+	return head[:3]
 }

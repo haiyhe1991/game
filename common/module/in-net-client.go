@@ -1,12 +1,10 @@
 package module
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/yamakiller/game/common/agreement"
-	"github.com/yamakiller/game/pactum"
 	"github.com/yamakiller/magicNet/engine/actor"
 	"github.com/yamakiller/magicNet/network"
 	"github.com/yamakiller/magicNet/service"
@@ -16,21 +14,25 @@ import (
 )
 
 //Dispatcher Event distributor
-type Dispatcher func(f implement.NetMethodFun, event *InNetMethodClientEvent)
+type Dispatcher func(event *InNetMethodClientEvent)
 
 //SpawnInNetClient  Produce an intranet client object
 func SpawnInNetClient() InNetClient {
-	return InNetClient{NetMethod: implement.SpawnMethodDispatch()}
+	return InNetClient{}
+}
+
+//IInNetClient Intranet client interface
+type IInNetClient interface {
+	implement.INetClient
+	UnPacket(name string, data []byte) interface{}
 }
 
 //InNetClient Intranet client base class
 type InNetClient struct {
 	implement.NetClient
 	service.Service
-	NetMethod implement.NetMethodDispatch
-	Dispatch  Dispatcher
+	Dispatch Dispatcher
 
-	parent *InNetClientManage
 	handle util.NetHandle
 	sock   int32
 }
@@ -39,7 +41,7 @@ type InNetClient struct {
 func (inc *InNetClient) Init() {
 	inc.Service.Init()
 	inc.RegisterMethod(&network.NetChunk{}, inc.OnRecv)
-	inc.NetMethod.Register(&pactum.GatewayRegisterRequest{}, inc.onGatewayRegister)
+	inc.RegisterMethod(&actor.Stopped{}, inc.Stoped)
 }
 
 //SetID Setting the client ID
@@ -84,16 +86,6 @@ func (inc *InNetClient) BuildKeyPair() {
 //GetKeyPublic Return key publicly available information
 func (inc *InNetClient) GetKeyPublic() string {
 	return ""
-}
-
-//SetParent Set the parent management object
-func (inc *InNetClient) SetParent(p *InNetClientManage) {
-	inc.parent = p
-}
-
-//GetParent Return to the parent management object
-func (inc *InNetClient) GetParent() *InNetClientManage {
-	return inc.parent
 }
 
 //OnRecv Overloaded data reception
@@ -155,6 +147,13 @@ func (inc *InNetClient) OnRecv(context actor.Context, message interface{}) {
 	}
 }
 
+//Stoped xxx
+func (inc *InNetClient) Stoped(context actor.Context, message interface{}) {
+	inc.LogDebug("Stoped: Socket-%d", inc.GetSocket())
+	inc.SetSocket(0)
+	inc.Service.Stoped(context, message)
+}
+
 func (inc *InNetClient) analysis(context actor.Context) error {
 	name, h, wrap, err := agreement.AgentParser(agreement.ConstInParser).Analysis(inc.GetKeyPair(),
 		inc.GetRecvBuffer())
@@ -166,30 +165,22 @@ func (inc *InNetClient) analysis(context actor.Context) error {
 		return implement.ErrAnalysisProceed
 	}
 
-	msgType := proto.MessageType(name)
-	if msgType != nil {
-		if f := inc.NetMethod.GetType(msgType); f == nil {
-			inc.Dispatch(f, &InNetMethodClientEvent{
-				Context:   context,
-				ProtoType: msgType,
-				InNetMethodEvent: InNetMethodEvent{
-					H: h,
-					NetMethodEvent: implement.NetMethodEvent{
-						Name:   name,
-						Socket: inc.GetSocket(),
-						Wrap:   wrap,
-					},
-				},
-			})
-			return implement.ErrAnalysisSuccess
-		}
-	}
-
-	return fmt.Errorf("Unregistered agreement %s", name)
+	inc.Dispatch(&InNetMethodClientEvent{
+		Context: context,
+		InNetMethodEvent: InNetMethodEvent{
+			H: h,
+			NetMethodEvent: implement.NetMethodEvent{
+				Name:   name,
+				Socket: inc.GetSocket(),
+				Wrap:   wrap,
+			},
+		},
+	})
+	return implement.ErrAnalysisSuccess
 }
 
 //Decode Decoding method
-func (inc *InNetClient) Decode(msgType reflect.Type, data []byte) (interface{}, error) {
+func (inc *InNetClient) decode(msgType reflect.Type, data []byte) (interface{}, error) {
 	wrap := reflect.Indirect(reflect.New(msgType.Elem())).Addr().Interface().(proto.Message)
 	err := proto.Unmarshal(data, wrap)
 	if err != nil {
@@ -199,47 +190,17 @@ func (inc *InNetClient) Decode(msgType reflect.Type, data []byte) (interface{}, 
 	return wrap, nil
 }
 
-func (inc *InNetClient) onGatewayRegister(event implement.INetMethodEvent) {
-	request := event.(*InNetMethodClientEvent)
-	iwrap, err := inc.Decode(request.ProtoType, request.Wrap)
+//UnPacket 解包
+func (inc *InNetClient) UnPacket(name string, data []byte) interface{} {
+	msgType := proto.MessageType(name)
+	if msgType == nil {
+		return nil
+	}
+	wrap, err := inc.decode(msgType, data)
 	if err != nil {
-		inc.LogError("Decoding exception will close the connection")
-		network.OperClose(inc.GetSocket())
-		return
+		return nil
 	}
-
-	wrap, success := iwrap.(*pactum.GatewayRegisterRequest)
-	if !success {
-		inc.LogError("Decoding exception, unable to convert the encoding to the" +
-			"corresponding protocol object, will close the connection")
-		network.OperClose(inc.GetSocket())
-		return
-	}
-
-	inc.SetID(uint64(wrap.GetId()))
-	oldClient := inc.parent.Register(inc.GetSocket(), wrap.GetId())
-	if oldClient != nil {
-		network.OperClose(oldClient.GetSocket())
-		inc.parent.Release(oldClient)
-		inc.LogDebug("Old Gateway connection exists, need to kick off, old connection")
-	}
-
-	//Reply packet
-	replyData, err := proto.Marshal(&pactum.GatewayRegisterResponse{Code: 0, Message: "Success"})
-	if err != nil {
-		inc.LogError("Reply code failed, connection will be closed")
-		network.OperClose(inc.GetSocket())
-		return
-	}
-
-	agreement.AgentParser(agreement.ConstInParser).Assemble(inc.GetKeyPair(),
-		agreement.ConstPactumVersion,
-		request.H,
-		"pactum.GatewayRegisterResponse",
-		replyData,
-		int32(len(replyData)))
-
-	inc.LogDebug("Gateway %d Register Complete", wrap.GetId())
+	return wrap
 }
 
 //Shutdown Terminate this client service
