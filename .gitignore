@@ -1,1 +1,14 @@
 gateway/gateway.exe
+tools/spawn-code/__pycache__/main.cpython-37.pyc
+tools/spawn-code/build/main/Analysis-00.toc
+tools/spawn-code/main.spec
+tools/spawn-code/build/main/base_library.zip
+tools/spawn-code/build/main/EXE-00.toc
+tools/spawn-code/build/main/main.exe.manifest
+tools/spawn-code/build/main/PKG-00.pkg
+tools/spawn-code/build/main/PKG-00.toc
+tools/spawn-code/build/main/PYZ-00.pyz
+.gitignore
+tools/spawn-code/build/main/PYZ-00.toc
+tools/spawn-code/build/main/xref-main.html
+tools/spawn-code/build/main/warn-main.txt
