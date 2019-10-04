@@ -1,1 +1,2 @@
-sign,gateway,GatewayRegisterProc,Gateway registration
+sign,in,SignInProc,Sign in Processing logic
+sign,out,SignOutProc,Logout Processing logic

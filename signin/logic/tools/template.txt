@@ -1,11 +1,6 @@
 import (
-	"github.com/gogo/protobuf/proto"
-	"github.com/yamakiller/game/common/agreement"
 	"github.com/yamakiller/game/common/module"
-	"github.com/yamakiller/game/pactum"
 	"github.com/yamakiller/magicNet/engine/logger"
-	"github.com/yamakiller/magicNet/network"
-	"github.com/yamakiller/magicNet/service"
 	"github.com/yamakiller/magicNet/service/implement"
 )
 

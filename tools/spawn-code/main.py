@@ -44,20 +44,20 @@ if "__main__" == __name__:
         print("spawn file:" + filepath)
         filehandle = oper.oper_spawn(filepath, package)
         sur = filehandle.read()
-        template_data = oper.read_template(templatefile).replace_name(key[2], template_data)
-        template_data = oper.read_template(templatefile).replace_note(key[3], template_data)
+        new_template_data = oper.read_template(templatefile).replace_name(key[2], template_data)
+        new_template_data = oper.read_template(templatefile).replace_note(key[3], new_template_data)
         if (ifile> 0):
             spawn_new_data += "\n"
         spawn_new_data +=  "module.FactoryInstance().Register(\"" + package + "." + key[2] + "\",&" + key[2] + "{})"
        
         if sur == "":
              sur += "package " + package + "\n\n"
-             sur += template_data
+             sur += new_template_data
   
         oper.oper_spawn(filepath, package).write(sur)
         ifile += 1
         print ("spawn file:" + filepath + " complate")
-    init_template_data = init_template_data.replace("[label list]", spawn_new_data)
+    init_template_data =  "package " + package + "\n\n" +  init_template_data.replace("[label list]", spawn_new_data)
     oper.oper_spawn(spawn_init_file, package).write(init_template_data)
     print("files:" + str(ifile))
 
