@@ -48,7 +48,7 @@ if "__main__" == __name__:
         new_template_data = oper.read_template(templatefile).replace_note(key[3], new_template_data)
         if (ifile> 0):
             spawn_new_data += "\n"
-        spawn_new_data +=  "module.FactoryInstance().Register(\"" + package + "." + key[2] + "\",&" + key[2] + "{})"
+        spawn_new_data +=  "	module.FactoryInstance().Register(\"" + package + "." + key[2] + "\",&" + key[2] + "{})"
        
         if sur == "":
              sur += "package " + package + "\n\n"

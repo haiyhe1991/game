@@ -5,5 +5,5 @@ import (
 
 func init() {
 	module.FactoryInstance().Register("logic.GatewayRegisterProc", &modulelogic.GatewayRegisterProc{})
-	[label list]
+[label list]
 }
